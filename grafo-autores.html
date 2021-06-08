@@ -297,12 +297,10 @@ function creaGrafoSocial(idDiv)
               var el;
 
               
-              document.getElementById('PopUpText').innerHTML = d.name;
+              document.getElementById('PopUpText').innerHTML = d.name + ' - ' + d.group;
               el = document.getElementById('PopUp')        
 
-                var coordinates= d3.mouse(this);
-                var x = coordinates[0];
-                var y = coordinates[1];
+              
 
               el.style.left = ( d3.event.pageX - 100) + "px";
               el.style.top = ( d3.event.pageY - 100) + "px";        
