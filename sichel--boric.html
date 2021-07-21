@@ -1,0 +1,1928 @@
+<script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
+     <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/e9d941381475b5df8b7d7691013401e171014e89/FileSaver.min.js"></script>
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+ 
+    <!--<script src="d3.layout.cloudv2.js"></script>-->
+
+
+        <style>
+    .node {
+      stroke-width: 1.5px;
+    }
+
+    .link {
+      stroke: #999;
+      stroke-opacity: .2;
+    }
+
+    #contenedorGrafo {
+      width: 3000px;
+      height: 3000px;
+      overflow: auto;
+      border:1px solid #C0C0C0;
+    }
+
+    #div1622511470071 {
+      width: 3000px;
+      height: 3000px;
+    }
+
+    </style>
+
+<div id="contenedorGrafo">    
+    <div id="div1622511470071"></div>
+</div>
+
+<div id='PopUp' style='display: none; position: absolute; left: 0px; top: 0px; border: solid gray 1px; padding: 10px; background-color: black; text-align: justify; font-size: 12px; color: white; width: 135px; '>
+  <center id='PopUpText'>TEXT</center>
+</div>
+
+
+<script>
+function getRandomColor() {
+var letters = '0123456789ABCDEF';
+var color = '#';
+for (var i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+}
+return color;
+}
+var myWindow;
+var svg;
+var width = 2000;
+var height = 2000;
+var lstEnlacesRaw = [];
+var duplaOrigenDest = [];
+var arrowSize = [ 0, 3, 3, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6];
+var maxv = 0;
+
+// Set-up the export button
+d3.select('#saveButton').on('click', function(){
+    var svgString = getSVGString(svg.node());
+    svgString2Image( svgString, 2*width, 2*height, 'png', save ); // passes Blob and filesize String to the callback
+
+    function save( dataBlob, filesize ){
+        saveAs( dataBlob, 'D3 vis exported to PNG.png' ); // FileSaver.js function
+    }
+});
+// Below are the functions that handle actual exporting:
+// getSVGString ( svgNode ) and svgString2Image( svgString, width, height, format, callback )
+function getSVGString( svgNode ) {
+    svgNode.setAttribute('xlink', 'http://www.w3.org/1999/xlink');
+    var cssStyleText = getCSSStyles( svgNode );
+    appendCSS( cssStyleText, svgNode );
+
+    var serializer = new XMLSerializer();
+    var svgString = serializer.serializeToString(svgNode);
+    svgString = svgString.replace(/(\w+)?:?xlink=/g, 'xmlns:xlink='); // Fix root xlink without namespace
+    svgString = svgString.replace(/NS\d+:href/g, 'xlink:href'); // Safari NS namespace fix
+
+    return svgString;
+
+    function getCSSStyles( parentElement ) {
+        var selectorTextArr = [];
+
+        // Add Parent element Id and Classes to the list
+        selectorTextArr.push( '#'+parentElement.id );
+        for (var c = 0; c < parentElement.classList.length; c++)
+                if ( !contains('.'+parentElement.classList[c], selectorTextArr) )
+                    selectorTextArr.push( '.'+parentElement.classList[c] );
+
+        // Add Children element Ids and Classes to the list
+        var nodes = parentElement.getElementsByTagName("*");
+        for (var i = 0; i < nodes.length; i++) {
+            var id = nodes[i].id;
+            if ( !contains('#'+id, selectorTextArr) )
+                selectorTextArr.push( '#'+id );
+
+            var classes = nodes[i].classList;
+            for (var c = 0; c < classes.length; c++)
+                if ( !contains('.'+classes[c], selectorTextArr) )
+                    selectorTextArr.push( '.'+classes[c] );
+        }
+
+        // Extract CSS Rules
+        var extractedCSSText = "";
+        for (var i = 0; i < document.styleSheets.length; i++) {
+            var s = document.styleSheets[i];
+            
+            try {
+                if(!s.cssRules) continue;
+            } catch( e ) {
+                    if(e.name !== 'SecurityError') throw e; // for Firefox
+                    continue;
+                }
+
+            var cssRules = s.cssRules;
+            for (var r = 0; r < cssRules.length; r++) {
+                if ( contains( cssRules[r].selectorText, selectorTextArr ) )
+                    extractedCSSText += cssRules[r].cssText;
+            }
+        }
+        
+
+        return extractedCSSText;
+
+        function contains(str,arr) {
+            return arr.indexOf( str ) === -1 ? false : true;
+        }
+
+    }
+
+    function appendCSS( cssText, element ) {
+        var styleElement = document.createElement("style");
+        styleElement.setAttribute("type","text/css"); 
+        styleElement.innerHTML = cssText;
+        var refNode = element.hasChildNodes() ? element.children[0] : null;
+        element.insertBefore( styleElement, refNode );
+    }
+}
+
+
+function svgString2Image( svgString, width, height, format, callback ) {
+    var format = format ? format : 'png';
+
+    var imgsrc = 'data:image/svg+xml;base64,'+ btoa( unescape( encodeURIComponent( svgString ) ) ); // Convert SVG string to data URL
+
+    var canvas = document.createElement("canvas");
+    var context = canvas.getContext("2d");
+ 
+
+    canvas.width = width;
+    canvas.height = height;
+
+    var image = new Image();
+    image.onload = function() {
+        context.clearRect ( 0, 0, width, height );
+        context.fillStyle = "white";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, width, height);
+
+        canvas.toBlob( function(blob) {
+            var filesize = Math.round( blob.length/1024 ) + ' KB';
+            if ( callback ) callback( blob, filesize );
+        });
+
+        
+    };
+
+    image.src = imgsrc;
+}
+
+function genStrJsonNodosyLinks(lstEnlacesRaw)
+{
+   var origen, destino, sep, s;
+   var nodo = new Array();
+   var lnkEntrantes = new Array();
+
+   for(var i = 0; i < lstEnlacesRaw.length; i++) {
+
+      if(nodo.indexOf(lstEnlacesRaw[i][0]) < 0) {
+         nodo.push(lstEnlacesRaw[i][0]);
+      }
+
+      if(nodo.indexOf(lstEnlacesRaw[i][1]) < 0) {
+         nodo.push(lstEnlacesRaw[i][1]); 
+      }
+
+      destino = nodo.indexOf(lstEnlacesRaw[i][1]);
+      if(!lnkEntrantes[destino]) {
+         lnkEntrantes[destino] = 0;
+      }
+      lnkEntrantes[destino] = lnkEntrantes[destino] + 1;
+   }
+
+ 
+
+   s = '{"nodes":[';
+  
+   for(var i = 0; i < nodo.length; i++) {
+      if(!lnkEntrantes[i]){
+        lnkEntrantes[i] = 0;
+      }
+      sep = (i == (nodo.length - 1))? '' : ',';
+      if (lnkEntrantes[i] > maxv) maxv = lnkEntrantes[i];
+      s = s + '{"name":"' + nodo[i] + '", "group":' + lnkEntrantes[i] + ', "id":' + i + '}' + sep;
+   }
+   console.log('maxv  '+maxv)
+   s = s + '], "links":[';
+
+   for(var i = 0; i < lstEnlacesRaw.length; i++) {
+      sep = (i == (lstEnlacesRaw.length - 1))? '' : ',';
+      origen = nodo.indexOf(lstEnlacesRaw[i][0]);
+      destino = nodo.indexOf(lstEnlacesRaw[i][1]);
+     
+      s = s + '{"source":' + origen + ',"target":' + destino + ',"value":2}' + sep;
+   }
+
+   s = s + ']}';
+   return s;
+}
+
+
+function creaGrafoSocial(idDiv)
+{
+    var strJson = genStrJsonNodosyLinks(lstEnlacesRaw);
+    var dataJSON = JSON.parse(strJson);
+
+    
+
+    var color = d3.scale.category20c();
+
+    var force = d3.layout.force()
+         .charge(-290)  
+        .linkDistance(80)
+        .size([width, height]);
+
+    svg = d3.select("#" + idDiv).append("svg")  
+        .attr('viewBox','0 0 ' + width + ' ' + height)
+
+        .attr('preserveAspectRatio','xMinYMin');
+
+/*
+     svg.append("defs").append("marker")
+        .attr("id", "arrowhead")
+        .attr("refX", 6 + 4) 
+        .attr("refY", 2)
+        .attr("markerWidth", 8)
+        .attr("markerHeight", 8)
+        .attr("orient", "auto")
+        .append("path")
+        .attr("d", "M 0,0 V 4 L6,2 Z");    
+
+   */
+    var graph = dataJSON;
+
+    force
+        .nodes(graph.nodes)
+        .links(graph.links)
+        .start();
+
+    var link = svg.selectAll("line.link")
+        .data(graph.links)
+        .enter().append("line")
+        
+        .attr("class",  function(d) {
+            //console.log("link source-" + d.source.id + " target-" + d.target.id);
+            return "link source-" + d.source.id + " target-" + d.target.id;
+        })
+        .attr("marker-end", "url(#arrowhead)") 
+        .style("stroke-width", function(d) { return Math.sqrt(d.value); });
+
+    var f = d3.scale.category10();
+        var g = d3.scale.category20();
+        var h = d3.scale.category20b();
+        var ii = d3.scale.category20c();
+
+        var colorScales = [f,g,h,ii];
+        var colorLen = [10,20,20,20];
+
+        var PRGn = ["#40004b","#762a83","#9970ab","#c2a5cf","#e7d4e8","#f7f7f7","#d9f0d3","#a6dba0","#5aae61","#1b7837","#00441b"];
+
+        var RdYlGn = ["#a50026","#d73027","#f46d43","#fdae61","#fee08b","#ffffbf","#d9ef8b","#a6d96a","#66bd63","#1a9850","#006837", "#40004b","#762a83","#9970ab","#c2a5cf","#e7d4e8","#f7f7f7","#d9f0d3","#a6dba0","#5aae61","#1b7837","#00441b", "#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33","#a65628","#f781bf","#999999","#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f","#e5c494","#b3b3b3", '#d72631', '#a2d5c6', '#077b8a' , '#5c3c92', '#e2d810','#d9138a','#12a4d9','#322e2f', '#f3ca20', '#cf1578', '#e8d21d', '#039fbe', '#b20238', '#e75874', '#be1558', '#fbcbc9', '#322514'];
+        var colors = [
+"#63b598", "#ce7d78", "#ea9e70", "#a48a9e", "#c6e1e8", "#648177" ,"#0d5ac1" ,
+"#f205e6" ,"#1c0365" ,"#14a9ad" ,"#4ca2f9" ,"#a4e43f" ,"#d298e2" ,"#6119d0",
+"#d2737d" ,"#c0a43c" ,"#f2510e" ,"#651be6" ,"#79806e" ,"#61da5e" ,"#cd2f00" ,
+"#9348af" ,"#01ac53" ,"#c5a4fb" ,"#996635","#b11573" ,"#4bb473" ,"#75d89e" ,
+"#2f3f94" ,"#2f7b99" ,"#da967d" ,"#34891f" ,"#b0d87b" ,"#ca4751" ,"#7e50a8" ,
+"#c4d647" ,"#e0eeb8" ,"#11dec1" ,"#289812" ,"#566ca0" ,"#ffdbe1" ,"#2f1179" ,
+"#935b6d" ,"#916988" ,"#513d98" ,"#aead3a", "#9e6d71", "#4b5bdc", "#0cd36d",
+"#250662", "#cb5bea", "#228916", "#ac3e1b", "#df514a", "#539397", "#880977",
+"#f697c1", "#ba96ce", "#679c9d", "#c6c42c", "#5d2c52", "#48b41b", "#e1cf3b",
+"#5be4f0", "#57c4d8", "#a4d17a", "#225b8", "#be608b", "#96b00c", "#088baf",
+"#f158bf", "#e145ba", "#ee91e3", "#05d371", "#5426e0", "#4834d0", "#802234",
+"#6749e8", "#0971f0", "#8fb413", "#b2b4f0", "#c3c89d", "#c9a941", "#41d158",
+"#fb21a3", "#51aed9", "#5bb32d", "#807fb", "#21538e", "#89d534", "#d36647",
+"#7fb411", "#0023b8", "#3b8c2a", "#986b53", "#f50422", "#983f7a", "#ea24a3",
+"#79352c", "#521250", "#c79ed2", "#d6dd92", "#e33e52", "#b2be57", "#fa06ec",
+"#1bb699", "#6b2e5f", "#64820f", "#1c271", "#21538e", "#89d534", "#d36647",
+"#7fb411", "#0023b8", "#3b8c2a", "#986b53", "#f50422", "#983f7a", "#ea24a3",
+"#79352c", "#521250", "#c79ed2", "#d6dd92", "#e33e52", "#b2be57", "#fa06ec",
+"#1bb699", "#6b2e5f", "#64820f", "#1c271", "#9cb64a", "#996c48", "#9ab9b7",
+"#06e052", "#e3a481", "#0eb621", "#fc458e", "#b2db15", "#aa226d", "#792ed8",
+"#73872a", "#520d3a", "#cefcb8", "#a5b3d9", "#7d1d85", "#c4fd57", "#f1ae16",
+"#8fe22a", "#ef6e3c", "#243eeb", "#1dc18", "#dd93fd", "#3f8473", "#e7dbce",
+"#421f79", "#7a3d93", "#635f6d", "#93f2d7", "#9b5c2a", "#15b9ee", "#0f5997",
+"#409188", "#911e20", "#1350ce", "#10e5b1", "#fff4d7", "#cb2582", "#ce00be",
+"#32d5d6", "#17232", "#608572", "#c79bc2", "#00f87c", "#77772a", "#6995ba",
+"#fc6b57", "#f07815", "#8fd883", "#060e27", "#96e591", "#21d52e", "#d00043",
+"#b47162", "#1ec227", "#4f0f6f", "#1d1d58", "#947002", "#bde052", "#e08c56",
+"#28fcfd", "#bb09b", "#36486a", "#d02e29", "#1ae6db", "#3e464c", "#a84a8f",
+"#911e7e", "#3f16d9", "#0f525f", "#ac7c0a", "#b4c086", "#c9d730", "#30cc49",
+"#3d6751", "#fb4c03", "#640fc1", "#62c03e", "#d3493a", "#88aa0b", "#406df9",
+"#615af0", "#4be47", "#2a3434", "#4a543f", "#79bca0", "#a8b8d4", "#00efd4",
+"#7ad236", "#7260d8", "#1deaa7", "#06f43a", "#823c59", "#e3d94c", "#dc1c06",
+"#f53b2a", "#b46238", "#2dfff6", "#a82b89", "#1a8011", "#436a9f", "#1a806a",
+"#4cf09d", "#c188a2", "#67eb4b", "#b308d3", "#fc7e41", "#af3101", "#ff065",
+"#71b1f4", "#a2f8a5", "#e23dd0", "#d3486d", "#00f7f9", "#474893", "#3cec35",
+"#1c65cb", "#5d1d0c", "#2d7d2a", "#ff3420", "#5cdd87", "#a259a4", "#e4ac44",
+"#1bede6", "#8798a4", "#d7790f", "#b2c24f", "#de73c2", "#d70a9c", "#25b67",
+"#88e9b8", "#c2b0e2", "#86e98f", "#ae90e2", "#1a806b", "#436a9e", "#0ec0ff",
+"#f812b3", "#b17fc9", "#8d6c2f", "#d3277a", "#2ca1ae", "#9685eb", "#8a96c6",
+"#dba2e6", "#76fc1b", "#608fa4", "#20f6ba", "#07d7f6", "#dce77a", "#77ecca"];
+var rcolors = [];
+for (let i = 0; i < 1000; i++) {
+  rcolors.push(getRandomColor());
+}
+        console.log("colores " + RdYlGn.length)
+        RdYlGn = rcolors //shuffle(colors)
+    var node = svg.selectAll(".node")
+        .data(graph.nodes)
+
+        .enter().append("circle")
+        .attr("class", "node")
+        
+        .attr("r", function(d) { 
+            var val = d.group;
+            //console.log("-----   "+val)
+            return 15*normalize(val, maxv, 0)+10; 
+        })
+        .style("fill", function(d) { 
+            
+            return RdYlGn[d.group]; })
+            //return '#e8d21d'; })
+        .each(function(d) { this.id = 'nodo_' + d.id; })      
+
+        .on("mouseover", function(d,i) { 
+              var el;
+
+              
+              document.getElementById('PopUpText').innerHTML = d.name + ' - ' + d.group;
+              el = document.getElementById('PopUp')        
+
+              
+
+              el.style.left = ( d3.event.pageX - 100) + "px";
+              el.style.top = ( d3.event.pageY - 100) + "px";        
+              el.style.display = 'block';
+
+             
+
+              svg.selectAll("line.link.target-" + d.id).classed("target", true).style("stroke", 'red'); 
+              svg.selectAll("line.link.source-" + d.id).classed("source", true).style("stroke", 'green');
+        })
+
+        .on("click", function(d,i) {  
+              var el, x, y;
+
+             
+              document.getElementById('PopUpText').innerHTML = d.name;
+              el = document.getElementById('PopUp')        
+              el.style.left = d.x + "px";
+              el.style.top = d.y + "px";        
+              el.style.display = 'block';
+
+              
+               var sUsr, sUrl;
+               sUsr = d.name;
+               sUsr = sUsr.substring(1, sUsr.length);
+               sUrl = "https://twitter.com/intent/user?screen_name=" + sUsr;
+
+               if(myWindow) {
+                  myWindow.close();
+               }
+
+               //myWindow = window.open(sUrl, "", "width=550,height=520,left=450,top=150");
+               
+        })
+
+        .on("mouseout", function(d)
+        {
+              
+              document.getElementById('PopUp').style.display = 'none';
+
+              svg.selectAll("line.link.target-" + d.id).classed("target", false).style("stroke", "#CCC");;
+              svg.selectAll("line.link.source-" + d.id).classed("source", false).style("stroke", "#CCC");
+        })
+
+        .call(force.drag);
+
+ 
+
+    force.on("tick", function() {
+      link.attr("x1", function(d) { return d.source.x; })
+          .attr("y1", function(d) { return d.source.y; })
+          .attr("x2", function(d) { return d.target.x; })
+          .attr("y2", function(d) { return d.target.y; });
+
+      node.attr("cx", function(d) { return d.x; })
+          .attr("cy", function(d) { return d.y; });
+    });
+
+}
+
+
+function normalize(val, max, min) { return (val - min) / (max - min); }
+function centrarDivEnViewport(idDiv, idDivViewport) 
+{
+   var divViewport = document.getElementById(idDivViewport);
+   var div = document.getElementById(idDiv);
+
+   var maxScrollLeft = div.offsetWidth - divViewport.offsetWidth;
+   var maxScrollTop = div.offsetHeight - divViewport.offsetHeight;
+
+   divViewport.scrollTop = maxScrollTop/2;
+   divViewport.scrollLeft = maxScrollLeft/2;
+}
+
+ 
+window.onload = function() 
+{
+     Def_lstEnlacesRaw();
+     creaGrafoSocial("div1622511470071");
+     centrarDivEnViewport("div1622511470071", "contenedorGrafo") 
+}
+function shuffle(array) {
+  var currentIndex = array.length,  randomIndex;
+
+  // While there remain elements to shuffle...
+  while (0 !== currentIndex) {
+
+    // Pick a remaining element...
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+
+    // And swap it with the current element.
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex], array[currentIndex]];
+  }
+
+  return array;
+}
+
+function Def_lstEnlacesRaw()
+{
+  
+  lstEnlacesRaw =  [["jeniffermella", "gabrielboric"],
+["amaya_alvez", "gabrielboric"],
+["damabarca", "gabrielboric"],
+["NatividadLlanq3", "gabrielboric"],
+["baradit", "gabrielboric"],
+["PamJiles", "gabrielboric"],
+["IgnacioAchurra", "gabrielboric"],
+["giovannaroa", "gabrielboric"],
+["YarelaAysen", "gabrielboric"],
+["adnradiochile", "gabrielboric"],
+["ieschile", "gabrielboric"],
+["terepaneque", "gabrielboric"],
+["sonarfm", "gabrielboric"],
+["LatorreJI", "gabrielboric"],
+["ChileMujeresOrg", "gabrielboric"],
+["GiorgioJackson", "gabrielboric"],
+["MultigremialN", "gabrielboric"],
+["juanpabloswett", "gabrielboric"],
+["RicardoRincon1", "gabrielboric"],
+["RDemocratica", "gabrielboric"],
+["FpvrPrensa", "gabrielboric"],
+["gheragor", "gabrielboric"],
+["mmlagoscc", "gabrielboric"],
+["TerramChile", "gabrielboric"],
+["rudronio", "gabrielboric"],
+["MiguelCrispiS", "gabrielboric"],
+["cuevaspato", "gabrielboric"],
+["ElfiltradorCl", "gabrielboric"],
+["Ma_joseOyarzun", "gabrielboric"],
+["pablolirar", "gabrielboric"],
+["DiputadoMoraga", "gabrielboric"],
+["Claudia_Mix", "gabrielboric"],
+["tv_Amaro", "gabrielboric"],
+["gabrielboric", "gabrielboric"],
+["SistemaB", "gabrielboric"],
+["KEspindola", "gabrielboric"],
+["diego_ibanezc", "gabrielboric"],
+["difamadores", "gabrielboric"],
+["tomashirsch", "gabrielboric"],
+["criordor", "gabrielboric"],
+["KarolCariola", "gabrielboric"],
+["Hugo_Gutierrez_", "gabrielboric"],
+["oherrerag", "gabrielboric"],
+["elfrente_amplio", "gabrielboric"],
+["pamela_poo", "gabrielboric"],
+["CCuadradoN", "gabrielboric"],
+["DefendamsChiloe", "gabrielboric"],
+["Chile_Alerta", "gabrielboric"],
+["chileconvoca", "gabrielboric"],
+["ricardocelis", "gabrielboric"],
+["Marce_Sandoval_", "gabrielboric"],
+["thecliniccl", "gabrielboric"],
+["lucialopezchile", "gabrielboric"],
+["LaPatriaTwitera", "gabrielboric"],
+["gonzalowinter", "gabrielboric"],
+["GaelDiputada", "gabrielboric"],
+["ONUChile", "gabrielboric"],
+["ElisaLoncon", "gabrielboric"],
+["Jaime_Bassa", "gabrielboric"],
+["PNUDChile", "gabrielboric"],
+["unhrcpr", "gabrielboric"],
+["cepal_onu", "gabrielboric"],
+["OITconosur", "gabrielboric"],
+["ONUMujeresChile", "gabrielboric"],
+["convencioncl", "gabrielboric"],
+["infogatecl", "gabrielboric"],
+["gustavoaguayoz", "gabrielboric"],
+["maxcolodro", "gabrielboric"],
+["sesnaola", "gabrielboric"],
+["camilamerica", "gabrielboric"],
+["anitam_c", "gabrielboric"],
+["javierapelo_", "gabrielboric"],
+["camila_vallejo", "gabrielboric"],
+["imineffablee", "gabrielboric"],
+["insertetitulo", "gabrielboric"],
+["eldesconcierto", "gabrielboric"],
+["RadioUdeC", "gabrielboric"],
+["24HorasTVN", "gabrielboric"],
+["ipoduje", "gabrielboric"],
+["CaroolMarianne", "gabrielboric"],
+["valenzuelalevi", "gabrielboric"],
+["U_Academia", "gabrielboric"],
+["tatiurru", "gabrielboric"],
+["mllanten1", "gabrielboric"],
+["JorgeTarud", "gabrielboric"],
+["manuconstituye", "gabrielboric"],
+["florcitamotuda", "gabrielboric"],
+["RafaVenegas", "gabrielboric"],
+["jlorenafries", "gabrielboric"],
+["RadioUmbral", "gabrielboric"],
+["fernando_atria", "gabrielboric"],
+["felipeharboe", "gabrielboric"],
+["CalamaVelasquez", "gabrielboric"],
+["danieljadue", "gabrielboric"],
+["ifloresdiputado", "gabrielboric"],
+["SAesgener", "gabrielboric"],
+["patriciorosas", "gabrielboric"],
+["Raul_Soto1", "gabrielboric"],
+["ximenaordenes", "gabrielboric"],
+["Tele13_Radio", "gabrielboric"],
+["KenaLorenziniL", "gabrielboric"],
+["datosnomitos", "gabrielboric"],
+["bruffinelli", "gabrielboric"],
+["elmostrador", "gabrielboric"],
+["daniel_nunez_a", "gabrielboric"],
+["LeoSotoChile", "gabrielboric"],
+["Muletjaime", "gabrielboric"],
+["ximerincon", "gabrielboric"],
+["jorbritoh", "gabrielboric"],
+["GonzaloMontoyaR", "gabrielboric"],
+["TomasVodanovic", "gabrielboric"],
+["pelotazo", "gabrielboric"],
+["meganoticiascl", "gabrielboric"],
+["kennysubiabre", "gabrielboric"],
+["fideldiputado", "gabrielboric"],
+["adeurresti", "gabrielboric"],
+["senadorquintana", "gabrielboric"],
+["ProvosteYasna", "gabrielboric"],
+["Cooperativa", "gabrielboric"],
+["tomaslaibe", "gabrielboric"],
+["fchahin", "gabrielboric"],
+["calderonismael", "gabrielboric"],
+["gabrielsilber", "gabrielboric"],
+["mariseka", "gabrielboric"],
+["CamilaRojas_V", "gabrielboric"],
+["danielverdessi", "gabrielboric"],
+["joannaperezolea", "gabrielboric"],
+["Mayafernandeza", "gabrielboric"],
+["rodrigovega", "gabrielboric"],
+["Duranbaronti", "gabrielboric"],
+["CFachinetti", "gabrielboric"],
+["LuciaDammert", "gabrielboric"],
+["AconcaguaNews", "gabrielboric"],
+["izkia", "gabrielboric"],
+["tv_mauricio", "gabrielboric"],
+["EduardoVergaraB", "gabrielboric"],
+["jgalemparte", "gabrielboric"],
+["radiousach", "gabrielboric"],
+["Cadem_cl", "gabrielboric"],
+["margamargatv", "gabrielboric"],
+["aundurragav", "gabrielboric"],
+["marcelodiazd", "gabrielboric"],
+["carolinagoic", "gabrielboric"],
+["lauralbornoz", "gabrielboric"],
+["RobertoCeledonF", "gabrielboric"],
+["matiaswalkerp", "gabrielboric"],
+["IraciHassler", "gabrielboric"],
+["Orrego", "gabrielboric"],
+["EdoDuran", "gabrielboric"],
+["MaiteOrsini", "gabrielboric"],
+["carmen_hertz", "gabrielboric"],
+["Pauta_cl", "gabrielboric"],
+["paislobo", "gabrielboric"],
+["Horade_Noticias", "gabrielboric"],
+["arlettegay", "gabrielboric"],
+["gzaliasnik", "gabrielboric"],
+["renenaranjo", "gabrielboric"],
+["lilyperez", "gabrielboric"],
+["TVUNoticias", "gabrielboric"],
+["El_Ciudadano", "gabrielboric"],
+["Rementeria", "gabrielboric"],
+["pcayuqueo", "gabrielboric"],
+["cgomezcas", "gabrielboric"],
+["DiarioConce", "gabrielboric"],
+["SylviaEyzaguirr", "gabrielboric"],
+["gmanen", "gabrielboric"],
+["ConySchon", "gabrielboric"],
+["elcontrastecl", "gabrielboric"],
+["_belenaza", "gabrielboric"],
+["siempreisla", "gabrielboric"],
+["la_convergencia", "gabrielboric"],
+["vladomirosevic", "gabrielboric"],
+["IgnacioIriarte", "gabrielboric"],
+["Na_Cabro", "gabrielboric"],
+["BoricComando", "gabrielboric"],
+["angelcarcavilla", "gabrielboric"],
+["ccifuentesh", "gabrielboric"],
+["labeasanchez", "gabrielboric"],
+["javiparada", "gabrielboric"],
+["ASlachevsky", "gabrielboric"],
+["franciscamoya_", "gabrielboric"],
+["gabrielbori", "gabrielboric"],
+["Censelio", "gabrielboric"],
+["CatalinaPerezS", "gabrielboric"],
+["IgualesChile", "gabrielboric"],
+["JosAndrsMurillo", "gabrielboric"],
+["danielstingo", "gabrielboric"],
+["ComandoBoric", "gabrielboric"],
+["JulioEduardoCo4", "gabrielboric"],
+["tomasfuentes", "gabrielboric"],
+["PatiRadaSalazar", "gabrielboric"],
+["Iquiquevision", "gabrielboric"],
+["lajanidu", "gabrielboric"],
+["ADignidadCL", "gabrielboric"],
+["pola_jara_perez", "gabrielboric"],
+["catafernandezc", "gabrielboric"],
+["G_LocalesXBoric", "gabrielboric"],
+["Latin_Bitman", "gabrielboric"],
+["freesalvaje", "gabrielboric"],
+["rodrigoulloa", "gabrielboric"],
+["tjholt", "gabrielboric"],
+["fatiexcusat", "gabrielboric"],
+["arancibialmte", "gabrielboric"],
+["CodeXverde", "gabrielboric"],
+["mejorllamaldany", "gabrielboric"],
+["pepe_auth", "gabrielboric"],
+["VinkaJackson", "gabrielboric"],
+["CokePacheco", "gabrielboric"],
+["derechoaltiempo", "gabrielboric"],
+["silvanavarreter", "gabrielboric"],
+["nespejoy", "gabrielboric"],
+["quijotadeapie", "gabrielboric"],
+["carcamofelipe", "gabrielboric"],
+["vidalcvale", "gabrielboric"],
+["Pa__tty", "gabrielboric"],
+["AcueOficial", "gabrielboric"],
+["AprueboYungay", "gabrielboric"],
+["munimelipilla", "gabrielboric"],
+["cgajardop", "gabrielboric"],
+["Paulillasama", "gabrielboric"],
+["Espelunco", "gabrielboric"],
+["nelquihue_", "gabrielboric"],
+["tamypalma", "gabrielboric"],
+["magonzalezortiz", "gabrielboric"],
+["DiegoPardow", "gabrielboric"],
+["locarvt", "gabrielboric"],
+["javiarce", "gabrielboric"],
+["javimartinez_f", "gabrielboric"],
+["natisubercaseau", "gabrielboric"],
+["OPSAL_", "gabrielboric"],
+["jorgeerrazuriz", "gabrielboric"],
+["Fdocarvalloa", "gabrielboric"],
+["NodoXXI", "gabrielboric"],
+["DeudoresEduc", "gabrielboric"],
+["RodrigoMalleaC", "gabrielboric"],
+["AntoLarrain_", "gabrielboric"],
+["BoricNinez", "gabrielboric"],
+["La_Segunda", "gabrielboric"],
+["Canal_21tv", "gabrielboric"],
+["NoamTitelman", "gabrielboric"],
+["JPRojasDeuda", "gabrielboric"],
+["myriamcadizb", "gabrielboric"],
+["desperezoso", "gabrielboric"],
+["eduardothayer", "gabrielboric"],
+["nico_grau", "gabrielboric"],
+["SJxBoric", "gabrielboric"],
+["matissalinast", "gabrielboric"],
+["jpalvarez_cl", "gabrielboric"],
+["mariajose_cruz", "gabrielboric"],
+["paulinarelmu", "gabrielboric"],
+["franochoame", "gabrielboric"],
+["valerialunacs", "gabrielboric"],
+["joseluisugarte", "gabrielboric"],
+["insunzam", "gabrielboric"],
+["FranSolar", "gabrielboric"],
+["brigadachacon", "gabrielboric"],
+["Pedrocig", "gabrielboric"],
+["FteSindicalNMA", "gabrielboric"],
+["SCAC_Chile", "gabrielboric"],
+["franperalesf", "gabrielboric"],
+["smillaleo", "gabrielboric"],
+["uchile", "gabrielboric"],
+["Constindigena", "gabrielboric"],
+["conciertoradio", "gabrielboric"],
+["karina_ol", "gabrielboric"],
+["Cris_Fdo_Garcia", "gabrielboric"],
+["ppreds86", "gabrielboric"],
+["futurofm", "gabrielboric"],
+["camicarreno", "gabrielboric"],
+["DMonteverdeR", "gabrielboric"],
+["FTETRABJADORES", "gabrielboric"],
+["AlertaIslaRiesc", "gabrielboric"],
+["ivanmoreirab", "gabrielboric"],
+["MiguelCalisto", "gabrielboric"],
+["berfontaine", "gabrielboric"],
+["ginniasa", "gabrielboric"],
+["radio_festival", "gabrielboric"],
+["claudiobustios", "gabrielboric"],
+["ColegioProfes", "gabrielboric"],
+["PoliticayRS", "gabrielboric"],
+["PiensaPrensa", "gabrielboric"],
+["jschaulsohn", "gabrielboric"],
+["uvalpochile", "gabrielboric"],
+["SebaAranedaR", "gabrielboric"],
+["Natajoignant", "gabrielboric"],
+["Surterritori", "gabrielboric"],
+["elbrujo", "gabrielboric"],
+["SindicatoCDF", "gabrielboric"],
+["paulamolinat", "gabrielboric"],
+["FIMA_Chile", "gabrielboric"],
+["servelchil", "gabrielboric"],
+["josemdelpino", "gabrielboric"],
+["EvaRayen", "gabrielboric"],
+["mati_fernandez", "gabrielboric"],
+["pablomackenna", "gabrielboric"],
+["storrealbaa", "gabrielboric"],
+["andresmolinam", "gabrielboric"],
+["renesaffirio", "gabrielboric"],
+["margaritahantke", "gabrielboric"],
+["mcubillossigall", "gabrielboric"],
+["InterferenciaCL", "gabrielboric"],
+["biobio", "gabrielboric"],
+["patriciowalker", "gabrielboric"],
+["i_respublica", "gabrielboric"],
+["felipekast", "gabrielboric"],
+["ObservatorioC", "gabrielboric"],
+["OAguileraRuiz", "gabrielboric"],
+["leoromerosaez", "gabrielboric"],
+["M_BustamanteA", "gabrielboric"],
+["InzulzaAlberto", "gabrielboric"],
+["manuAmelie", "gabrielboric"],
+["AnaMariaGazmuri", "gabrielboric"],
+["glorianaveillan", "gabrielboric"],
+["PatoFdez", "gabrielboric"],
+["moniv19", "gabrielboric"],
+["MGuarello", "gabrielboric"],
+["latercera", "gabrielboric"],
+["paulaescobarch", "gabrielboric"],
+["oscar_contardo", "gabrielboric"],
+["DMatamala", "gabrielboric"],
+["ctransparencia", "gabrielboric"],
+["Contraloriacl", "gabrielboric"],
+["LandeckH", "gabrielboric"],
+["desbordes", "gabrielboric"],
+["Demente_Bonita", "gabrielboric"],
+["nonaossandon", "gabrielboric"],
+["jmfuenzalida", "gabrielboric"],
+["ClaudiaRodHoz", "gabrielboric"],
+["rpiraces", "gabrielboric"],
+["fuenzalidaRn", "gabrielboric"],
+["PaolaAraneda", "gabrielboric"],
+["Jorge_espiral", "gabrielboric"],
+["goyarzun", "gabrielboric"],
+["CristianValdivi", "gabrielboric"],
+["tere_marinovic", "gabrielboric"],
+["rodrigosepu", "gabrielboric"],
+["RoyoManuela", "gabrielboric"],
+["NDsindical", "gabrielboric"],
+["paralaconfianza", "gabrielboric"],
+["alfonsoconcha", "gabrielboric"],
+["CisternaOsorio", "gabrielboric"],
+["mauricio1178d", "gabrielboric"],
+["JuanVallejosC", "gabrielboric"],
+["totiorellanag", "gabrielboric"],
+["ionaRothfeld", "gabrielboric"],
+["SurHbs", "gabrielboric"],
+["ciudadania_i", "gabrielboric"],
+["danielchernilo", "gabrielboric"],
+["DocVictorTorres", "gabrielboric"],
+["mariosillard", "gabrielboric"],
+["Sergioespana", "gabrielboric"],
+["GmoRamirez", "gabrielboric"],
+["FTCobre", "gabrielboric"],
+["RHollmann", "gabrielboric"],
+["RebeldeErrante", "gabrielboric"],
+["LaRedTV", "gabrielboric"],
+["guillermosotov", "gabrielboric"],
+["AtardecerV", "gabrielboric"],
+["Alo__arellano", "gabrielboric"],
+["jjlalvarez", "gabrielboric"],
+["matiasasun", "gabrielboric"],
+["karydelfino", "gabrielboric"],
+["NaschlaA", "gabrielboric"],
+["Mister_Wolf_0", "gabrielboric"],
+["TodosPescamos", "gabrielboric"],
+["isaorellanag", "gabrielboric"],
+["fuerzacultural1", "gabrielboric"],
+["cristpineda", "gabrielboric"],
+["Lola_MDRG", "gabrielboric"],
+["Diego_DiazGonza", "gabrielboric"],
+["Felipe__Recabal", "gabrielboric"],
+["nanostern", "gabrielboric"],
+["VEXCOM_Uchile", "gabrielboric"],
+["lacatamunoz", "gabrielboric"],
+["pabloparedesm", "gabrielboric"],
+["MiguelConcha", "gabrielboric"],
+["kath_quevedo", "gabrielboric"],
+["FRANCONEGRO_", "gabrielboric"],
+["infante", "gabrielboric"],
+["DiegoLovegood", "gabrielboric"],
+["JusticiaManuelR", "gabrielboric"],
+["France_Santoro_", "gabrielboric"],
+["Alespinuda", "gabrielboric"],
+["ArchivoCAB", "gabrielboric"],
+["PCdeChile", "gabrielboric"],
+["jpiquer", "gabrielboric"],
+["VTI_Uchile", "gabrielboric"],
+["renejofre", "gabrielboric"],
+["MarceSabat", "gabrielboric"],
+["marian_barreaux", "gabrielboric"],
+["RafaSottolichio", "gabrielboric"],
+["CNNChile", "gabrielboric"],
+["CaritoGuerraFu", "gabrielboric"],
+["Naty_campusano", "gabrielboric"],
+["sebastafari", "gabrielboric"],
+["pautalibrelared", "gabrielboric"],
+["VinaxBoric", "gabrielboric"],
+["aluksicc", "gabrielboric"],
+["contimartinez", "gabrielboric"],
+["LoreAlcaldesa", "gabrielboric"],
+["OscarContardo", "gabrielboric"],
+["franilustradora", "gabrielboric"],
+["jpesp", "gabrielboric"],
+["SebbaMorales", "gabrielboric"],
+["pqtendencia_cl", "gabrielboric"],
+["cotineja", "gabrielboric"],
+["gabyriquelmeb", "gabrielboric"],
+["AburtoReinita", "gabrielboric"],
+["fr3cklg", "gabrielboric"],
+["CatalinaLlanoA", "gabrielboric"],
+["katybecker", "gabrielboric"],
+["thetimesCL", "gabrielboric"],
+["Chileokulto", "gabrielboric"],
+["ElBoyaldia", "gabrielboric"],
+["jg_valdes", "gabrielboric"],
+["CSIslademaipoT1", "gabrielboric"],
+["lopradoxboric", "gabrielboric"],
+["Dazeee2RS", "gabrielboric"],
+["Joseorrego", "gabrielboric"],
+["roter21", "gabrielboric"],
+["rafa_cavada", "gabrielboric"],
+["Sabescl", "gabrielboric"],
+["pablovidalrojas", "gabrielboric"],
+["francanalesmed", "gabrielboric"],
+["_jcgarrido", "gabrielboric"],
+["ncastilo", "gabrielboric"],
+["paulanarvaezo", "gabrielboric"],
+["gabimonsalv", "gabrielboric"],
+["GabrielBoric", "gabrielboric"],
+["_adrianamunoz", "gabrielboric"],
+["FelipeParadaM", "gabrielboric"],
+["EquipoDrRosas", "gabrielboric"],
+["CEspinozaQ", "gabrielboric"],
+["chilesust", "gabrielboric"],
+["Kena", "gabrielboric"],
+["MarceMellaO", "gabrielboric"],
+["ChiloexB", "gabrielboric"],
+["AleTirachini", "gabrielboric"],
+["cnashr", "gabrielboric"],
+["sboric", "gabrielboric"],
+["diegocorvalan", "gabrielboric"],
+["Alvaropaci", "gabrielboric"],
+["carlacruzf", "gabrielboric"],
+["AoLaonline", "gabrielboric"],
+["manuelaoh", "gabrielboric"],
+["patiaraya", "gabrielboric"],
+["CristobalOjedaV", "gabrielboric"],
+["FedeprusVsa", "gabrielboric"],
+["YouTube", "gabrielboric"],
+["conivaldesc", "gabrielboric"],
+["MacaRipa", "gabrielboric"],
+["pgselles", "gabrielboric"],
+["sergioramirezm", "gabrielboric"],
+["anquinteros", "gabrielboric"],
+["floro_ceballos", "gabrielboric"],
+["claudiaaldanas", "gabrielboric"],
+["marrfiq", "gabrielboric"],
+["LaGuacolda", "gabrielboric"],
+["nicocastrog", "gabrielboric"],
+["rcornejocaceres", "gabrielboric"],
+["MauricioMMQ75", "gabrielboric"],
+["ocorralesj", "gabrielboric"],
+["PepaHoffmann", "gabrielboric"],
+["RadioUniverso", "gabrielboric"],
+["KarinnaSG", "gabrielboric"],
+["GiorgioJackso", "gabrielboric"],
+["GedorarBrele", "gabrielboric"],
+["FeministasCS", "gabrielboric"],
+["ValeMelipillan", "gabrielboric"],
+["Pipolongstocki1", "gabrielboric"],
+["meridadelnorte", "gabrielboric"],
+["ts_vera", "gabrielboric"],
+["matiasdelrio", "gabrielboric"],
+["Diego_Schalper", "gabrielboric"],
+["javiplantita", "gabrielboric"],
+["pau_riquelme", "gabrielboric"],
+["valeporlachucha", "gabrielboric"],
+["FuerzaComunCL", "gabrielboric"],
+["cristilunaj", "gabrielboric"],
+["AlenaMorenaa", "gabrielboric"],
+["Carla_Amtmann", "gabrielboric"],
+["x_boric", "gabrielboric"],
+["laestrellavalpo", "gabrielboric"],
+["daviduribe", "gabrielboric"],
+["veroenviaje", "gabrielboric"],
+["Dani_Cicardini", "gabrielboric"],
+["Emol", "gabrielboric"],
+["alejandramatus", "gabrielboric"],
+["malaimagen", "gabrielboric"],
+["Boricpuentealto", "gabrielboric"],
+["Lareinaxboric", "gabrielboric"],
+["RNuevoMundo", "gabrielboric"],
+["eziocosta", "gabrielboric"],
+["patriciapolitz", "gabrielboric"],
+["isidoraalcalde", "gabrielboric"],
+["vagoilustrado", "gabrielboric"],
+["deliaconectada", "gabrielboric"],
+["sebas_vergara", "gabrielboric"],
+["lvillavicenciom", "gabrielboric"],
+["PaulaMendoza", "gabrielboric"],
+["carola_cuevasm", "gabrielboric"],
+["claudio", "gabrielboric"],
+["amarolabra", "gabrielboric"],
+["cerronaviaboric", "gabrielboric"],
+["GWallmapu", "gabrielboric"],
+["villa_grimaldi", "gabrielboric"],
+["AntoRivas", "gabrielboric"],
+["rmasad", "gabrielboric"],
+["jwbartlett92", "gabrielboric"],
+["LavinJoaquin", "gabrielboric"],
+["boric_melipilla", "gabrielboric"],
+["eliana_adams_", "gabrielboric"],
+["Natytoti", "gabrielboric"],
+["ignaciowalker", "gabrielboric"],
+["g5_noticias", "gabrielboric"],
+["seba29950", "gabrielboric"],
+["giorgiojackson", "gabrielboric"],
+["lacuart", "gabrielboric"],
+["Pajarobere", "gabrielboric"],
+["negrodanny", "gabrielboric"],
+["MacarenaFdezD", "gabrielboric"],
+["yasna_rodriguez", "gabrielboric"],
+["Noneleftbehind2", "gabrielboric"],
+["JuanCaMunozA", "gabrielboric"],
+["SofiAbuhadbaR", "gabrielboric"],
+["ComunesCL", "gabrielboric"],
+["caro_garciamo", "gabrielboric"],
+["fotoencampana", "gabrielboric"],
+["emol", "gabrielboric"],
+["CottetMagda", "gabrielboric"],
+["EmiliaRiosS", "gabrielboric"],
+["marioaguilera4", "gabrielboric"],
+["derechouchile", "gabrielboric"],
+["GreenpeaceCL", "gabrielboric"],
+["popelinna", "gabrielboric"],
+["vg_matias", "gabrielboric"],
+["inddhh", "gabrielboric"],
+["confedeprus", "gabrielboric"],
+["donmatas", "gabrielboric"],
+["camycont", "gabrielboric"],
+["mentiraslared", "gabrielboric"],
+["VicenteGberner", "gabrielboric"],
+["ManuelYanezE", "gabrielboric"],
+["MaipuxBoric", "gabrielboric"],
+["CEDUchile", "gabrielboric"],
+["DefensoriaUch", "gabrielboric"],
+["javilopezla", "gabrielboric"],
+["JaimeFuentesPu", "gabrielboric"],
+["m_astla", "gabrielboric"],
+["yestabocaesmia", "gabrielboric"],
+["mane__ru", "gabrielboric"],
+["tv_monica", "gabrielboric"],
+["mxperez", "gabrielboric"],
+["observafiscalcl", "gabrielboric"],
+["PazFemininja", "gabrielboric"],
+["sebastian_gray", "gabrielboric"],
+["colmedchile", "gabrielboric"],
+["CHVNoticias", "gabrielboric"],
+["Sundae_Mao", "gabrielboric"],
+["realcatalan", "gabrielboric"],
+["maipuxboric", "gabrielboric"],
+["AmplioBiobio", "gabrielboric"],
+["Jaztronomia", "gabrielboric"],
+["labaialoyer", "gabrielboric"],
+["RADIODELMAR", "gabrielboric"],
+["carlopezo", "gabrielboric"],
+["DFinanciero", "gabrielboric"],
+["Catalina_valpo", "gabrielboric"],
+["UCN_Coquimbo", "gabrielboric"],
+["_natisu", "gabrielboric"],
+["HillaryCHiner", "gabrielboric"],
+["Carabdechile", "gabrielboric"],
+["Camara_cl", "gabrielboric"],
+["Rformalareforma", "gabrielboric"],
+["PabloHerreraM_", "gabrielboric"],
+["AntofagastaTV", "gabrielboric"],
+["RicardoDiazC", "gabrielboric"],
+["Elena_Nito", "gabrielboric"],
+["preuss_cl", "gabrielboric"],
+["noticias_tvperu", "gabrielboric"],
+["Vero_Mendoza_F", "gabrielboric"],
+["CS_losrios", "gabrielboric"],
+["EconominaC", "gabrielboric"],
+["JMCarvajalG", "gabrielboric"],
+["cs_nunoa", "gabrielboric"],
+["ConcejalaVero", "gabrielboric"],
+["DeRadioCL", "gabrielboric"],
+["r_echecopar", "gabrielboric"],
+["Valemoyano_", "gabrielboric"],
+["monoarticos", "gabrielboric"],
+["ana_maria_yanez", "gabrielboric"],
+["phumanista", "gabrielboric"],
+["FTconvergencia", "gabrielboric"],
+["RumboColectivo", "gabrielboric"],
+["jmahumadaf", "gabrielboric"],
+["sofiavds", "gabrielboric"],
+["LuisV_Alcalde", "gabrielboric"],
+["mechitasdeclavo", "gabrielboric"],
+["contexto_cl", "gabrielboric"],
+["guidogirardi", "gabrielboric"],
+["sintracap", "gabrielboric"],
+["IriartePelu", "gabrielboric"],
+["Cutchile", "gabrielboric"],
+["ViceInostroza", "gabrielboric"],
+["canela_cs", "gabrielboric"],
+["fernandopaulsen", "gabrielboric"],
+["francescachiesa", "gabrielboric"],
+["Chile_Alerta", "Chile_Alerta"],
+["Maritzapruebo", "Chile_Alerta"],
+["danieljadue", "Chile_Alerta"],
+["camila_vallejo", "Chile_Alerta"],
+["El_Ciudadano", "Chile_Alerta"],
+["CoyhaiqueXJadue", "Chile_Alerta"],
+["ElianaRoa23", "Chile_Alerta"],
+["VENCEREMOSYSER2", "Chile_Alerta"],
+["soledad79855213", "Chile_Alerta"],
+["coquecoquillo", "Chile_Alerta"],
+["Jaimefernan31", "Chile_Alerta"],
+["Cris_ilustrador", "Chile_Alerta"],
+["LaListaPueblo", "Chile_Alerta"],
+["Chileokulto", "Chile_Alerta"],
+["chileconvoca", "Chile_Alerta"],
+["ChalecosAmarill", "Chile_Alerta"],
+["EPInforma", "Chile_Alerta"],
+["gabrielboric", "Chile_Alerta"],
+["veche54", "Chile_Alerta"],
+["vil_residente", "Chile_Alerta"],
+["SalvoMontalban6", "Chile_Alerta"],
+["SoyLaRockera", "Chile_Alerta"],
+["EstacionSin", "Chile_Alerta"],
+["Mirsalis", "Chile_Alerta"],
+["eldesconcierto", "Chile_Alerta"],
+["orangel57", "Chile_Alerta"],
+["avello_manuel", "Chile_Alerta"],
+["SoySedicioso", "Chile_Alerta"],
+["nancho68", "Chile_Alerta"],
+["FlaiteIlustrado", "Chile_Alerta"],
+["MagdaTo27215867", "Chile_Alerta"],
+["belenkisOtt", "Chile_Alerta"],
+["Lex_Albo", "Chile_Alerta"],
+["gastoncita25", "Chile_Alerta"],
+["ListaDelPueblo", "Chile_Alerta"],
+["Francis59320797", "Chile_Alerta"],
+["Xime78295294", "Chile_Alerta"],
+["PrincedeAmager", "Chile_Alerta"],
+["frida_mesah", "Chile_Alerta"],
+["AuroraArayaM", "Chile_Alerta"],
+["martaibacetac", "Chile_Alerta"],
+["mac_grandi", "Chile_Alerta"],
+["JorgeSharp", "Chile_Alerta"],
+["filsdu_soleil", "Chile_Alerta"],
+["renenaranjo", "Chile_Alerta"],
+["gabrielbori", "Chile_Alerta"],
+["danieljadu", "Chile_Alerta"],
+["manuelgaete120", "Chile_Alerta"],
+["patovalenz", "Chile_Alerta"],
+["jcp_julio", "Chile_Alerta"],
+["92Sobarzo", "Chile_Alerta"],
+["Parus72955081", "Chile_Alerta"],
+["rubenacualfa", "Chile_Alerta"],
+["SailorBarricada", "Chile_Alerta"],
+["JorgePobleteSa1", "Chile_Alerta"],
+["karina_ol", "Chile_Alerta"],
+["RotoPoblacion", "Chile_Alerta"],
+["natariz1", "Chile_Alerta"],
+["mmlagoscc", "Chile_Alerta"],
+["dv_davo", "Chile_Alerta"],
+["Radamanthys001", "Chile_Alerta"],
+["RatonconPeluca", "Chile_Alerta"],
+["jaavieraahc", "Chile_Alerta"],
+["artes_oficial", "Chile_Alerta"],
+["artes_oficia", "Chile_Alerta"],
+["StarVillalon", "Chile_Alerta"],
+["Brigittekarlsru", "Chile_Alerta"],
+["Odettdelaguarda", "Chile_Alerta"],
+["Grecoh28", "Chile_Alerta"],
+["lizita31644174", "Chile_Alerta"],
+["unnuevochile_22", "Chile_Alerta"],
+["Jaimesi17128469", "Chile_Alerta"],
+["Fernand77086996", "Chile_Alerta"],
+["dAcA_gUaTu", "Chile_Alerta"],
+["CaroTapiaCaris", "Chile_Alerta"],
+["Chris86144238", "Chile_Alerta"],
+["Jara714Jara", "Chile_Alerta"],
+["ElMelnick", "Chile_Alerta"],
+["Marock46601614", "Chile_Alerta"],
+["Siniestra_38", "Chile_Alerta"],
+["raul_morales", "Chile_Alerta"],
+["Movsocialesd10", "Chile_Alerta"],
+["melnicksergio", "Chile_Alerta"],
+["MonkeyDSofi", "Chile_Alerta"],
+["CarolinCacao777", "Chile_Alerta"],
+["ZurdoCritico", "Chile_Alerta"],
+["Rojafilosofa", "Chile_Alerta"],
+["RosaOvalleR1", "Chile_Alerta"],
+["andres20ad", "Chile_Alerta"],
+["jjcc_chile", "Chile_Alerta"],
+["BundtFantasma", "Chile_Alerta"],
+["clarisatipaina", "Chile_Alerta"],
+["Carol_Amaranta", "Chile_Alerta"],
+["Kazanov_cl", "Chile_Alerta"],
+["_SqueakyKitty_", "Chile_Alerta"],
+["ManuelS15689156", "Chile_Alerta"],
+["HeliaOrdenesCas", "Chile_Alerta"],
+["Aviles2Angela", "Chile_Alerta"],
+["Cancino", "Chile_Alerta"],
+["jaran_13", "Chile_Alerta"],
+["TwiterxsXJadue", "Chile_Alerta"],
+["DiegoMunoz1105", "Chile_Alerta"],
+["valdivia_viktor", "Chile_Alerta"],
+["CmdteCangrejo", "Chile_Alerta"],
+["Camara_cl", "Chile_Alerta"],
+["ConstitucionxAC", "Chile_Alerta"],
+["chris018r", "Chile_Alerta"],
+["hugoguionista", "Chile_Alerta"],
+["Viviana09602215", "Chile_Alerta"],
+["CarlosAmpuero", "Chile_Alerta"],
+["Pilitablank", "Chile_Alerta"],
+["Soledad4477", "Chile_Alerta"],
+["jadueista", "Chile_Alerta"],
+["PulcroCiudadano", "Chile_Alerta"],
+["Sandra91784542", "Chile_Alerta"],
+["EdwardYanez2017", "Chile_Alerta"],
+["pablinkypablon", "Chile_Alerta"],
+["LeoNavi8", "Chile_Alerta"],
+["RickArdoAO", "Chile_Alerta"],
+["GiorgioJackson", "Chile_Alerta"],
+["sosahumberto1", "Chile_Alerta"],
+["franciscoyapo", "Chile_Alerta"],
+["cohenzima", "Chile_Alerta"],
+["patoIucas", "Chile_Alerta"],
+["hugoaotorres", "Chile_Alerta"],
+["maparcepel", "Chile_Alerta"],
+["lichitalau", "Chile_Alerta"],
+["NachoAn34000532", "Chile_Alerta"],
+["RodriguezManuel", "Chile_Alerta"],
+["chucaraperez", "Chile_Alerta"],
+["RebecaGaeteS", "Chile_Alerta"],
+["ricardolagos", "Chile_Alerta"],
+["palma_profe", "Chile_Alerta"],
+["Alienhohner", "Chile_Alerta"],
+["CristianBarri89", "Chile_Alerta"],
+["connieachurra", "Chile_Alerta"],
+["Angeladread", "Chile_Alerta"],
+["p3dropiedra1", "Chile_Alerta"],
+["florcitamotuda", "Chile_Alerta"],
+["Mister_Wolf_0", "Chile_Alerta"],
+["carmen_hertz", "Chile_Alerta"],
+["LaRedTV", "Chile_Alerta"],
+["DanielJadue", "Chile_Alerta"],
+["alejofloyd", "Chile_Alerta"],
+["alejandropgh91", "Chile_Alerta"],
+["MauricioPesutic", "Chile_Alerta"],
+["estrellapeteca", "Chile_Alerta"],
+["Michucacao", "Chile_Alerta"],
+["CDKM78", "Chile_Alerta"],
+["JuanaMa61028116", "Chile_Alerta"],
+["la__ticher", "Chile_Alerta"],
+["Zeroalaizquier3", "Chile_Alerta"],
+["filosofofarandu", "Chile_Alerta"],
+["lafrontera_", "Chile_Alerta"],
+["Vyky65982964", "Chile_Alerta"],
+["PapiJaduista", "Chile_Alerta"],
+["SDRevolucion", "Chile_Alerta"],
+["Anastas99103938", "Chile_Alerta"],
+["xime_olivo", "Chile_Alerta"],
+["Brujalinda4", "Chile_Alerta"],
+["gatocorleone", "Chile_Alerta"],
+["OtroChileYa", "Chile_Alerta"],
+["DenunciaChile3", "Chile_Alerta"],
+["c_martinez_a", "Chile_Alerta"],
+["melibereydigol1", "Chile_Alerta"],
+["ramonlopez54", "Chile_Alerta"],
+["DanielC66739580", "Chile_Alerta"],
+["susana_tagle", "Chile_Alerta"],
+["bushidoverde", "Chile_Alerta"],
+["Jale76", "Chile_Alerta"],
+["Ricardo_Sm_s", "Chile_Alerta"],
+["mona_regalona", "Chile_Alerta"],
+["paulanarvaezo", "Chile_Alerta"],
+["marita_stappung", "Chile_Alerta"],
+["diaz_jarolin", "Chile_Alerta"],
+["AnaMariaGazmuri", "Chile_Alerta"],
+["emma_ag1", "Chile_Alerta"],
+["rodrigoulloa", "Chile_Alerta"],
+["panchokrebs", "Chile_Alerta"],
+["KarolCariola", "Chile_Alerta"],
+["howdareyou2020", "Chile_Alerta"],
+["cupidorosado", "Chile_Alerta"],
+["rod_naranjo", "Chile_Alerta"],
+["chupakabras69", "Chile_Alerta"],
+["ManuelPrezGuer3", "Chile_Alerta"],
+["LaLolaZF", "Chile_Alerta"],
+["calvarez2314", "Chile_Alerta"],
+["DrSuazo915", "Chile_Alerta"],
+["tomashirsch", "Chile_Alerta"],
+["VizyoRap", "Chile_Alerta"],
+["GiorgioStefoni", "Chile_Alerta"],
+["SolConcepcion30", "Chile_Alerta"],
+["Donkan_McClaud", "Chile_Alerta"],
+["LegadoBachelet", "Chile_Alerta"],
+["Rod_Cacerolas", "Chile_Alerta"],
+["Mondebohemien", "Chile_Alerta"],
+["UMANGLADYS", "Chile_Alerta"],
+["SiendoEstoy", "Chile_Alerta"],
+["AndreaA92699336", "Chile_Alerta"],
+["nga2043", "Chile_Alerta"],
+["CosmonautaAraya", "Chile_Alerta"],
+["KakarotodeFruna", "Chile_Alerta"],
+["remancase", "Chile_Alerta"],
+["daisycoloma21", "Chile_Alerta"],
+["ProvosteYasna", "Chile_Alerta"],
+["nomastonteras", "Chile_Alerta"],
+["Rolando37262556", "Chile_Alerta"],
+["ELHernandezS", "Chile_Alerta"],
+["RRespaldo3", "Chile_Alerta"],
+["Orrego", "Chile_Alerta"],
+["aluksicc", "Chile_Alerta"],
+["JuanSutilS", "Chile_Alerta"],
+["_hijademinero", "Chile_Alerta"],
+["virgo_arcoiris", "Chile_Alerta"],
+["karina_o", "Chile_Alerta"],
+["jalessandri", "Chile_Alerta"],
+["Tono_Coloma", "Chile_Alerta"],
+["lcruzcoke", "Chile_Alerta"],
+["jvanbiobio", "Chile_Alerta"],
+["PepaHoffmann", "Chile_Alerta"],
+["ivanmoreirab", "Chile_Alerta"],
+["sebastiansichel", "Chile_Alerta"],
+["IBriones", "Chile_Alerta"],
+["udipopular", "Chile_Alerta"],
+["RNchile", "Chile_Alerta"],
+["CarlosA83240538", "Chile_Alerta"],
+["DaVillate", "Chile_Alerta"],
+["RSalinasCorona", "Chile_Alerta"],
+["mentiraslared", "Chile_Alerta"],
+["cikratos", "Chile_Alerta"],
+["canofa", "Chile_Alerta"],
+["Maurizi44444330", "Chile_Alerta"],
+["PDC_Chile", "Chile_Alerta"],
+["YoBlumen", "Chile_Alerta"],
+["Juan02514268", "Chile_Alerta"],
+["laisacovarrubia", "Chile_Alerta"],
+["punKrazio", "Chile_Alerta"],
+["ADignidadC", "Chile_Alerta"],
+["BoudicaxJadue", "Chile_Alerta"],
+["Gapp_DDHH", "FpvrPrensa"],
+["gabrielboric", "FpvrPrensa"],
+["prensalibre_CL", "FpvrPrensa"],
+["LaListaPueblo", "FpvrPrensa"],
+["FpvrPrensa", "FpvrPrensa"],
+["cesarleivarubio", "FpvrPrensa"],
+["sebastiansichel", "FpvrPrensa"],
+["drivelikeidooo", "FpvrPrensa"],
+["eliasbravo", "FpvrPrensa"],
+["Maule_Informa", "FpvrPrensa"],
+["hernan_sr", "FpvrPrensa"],
+["KattKuyen", "FpvrPrensa"],
+["ZurdoCritico", "FpvrPrensa"],
+["RorockNewen", "FpvrPrensa"],
+["filosofofarandu", "FpvrPrensa"],
+["jjcc_chile", "FpvrPrensa"],
+["alexanwandter", "FpvrPrensa"],
+["maria_marie86", "FpvrPrensa"],
+["BoricComando", "FpvrPrensa"],
+["EPInforma", "FpvrPrensa"],
+["danieljadu", "FpvrPrensa"],
+["AprueboChDigno", "FpvrPrensa"],
+["ADignidadCL", "FpvrPrensa"],
+["FATrabajadores", "FpvrPrensa"],
+["danieljadue", "FpvrPrensa"],
+["_jcgarrido", "FpvrPrensa"],
+["agenciaunochile", "FpvrPrensa"],
+["tolonista2", "FpvrPrensa"],
+["MatiasR___", "FpvrPrensa"],
+["Absonito1", "FpvrPrensa"],
+["kmyguerra", "FpvrPrensa"],
+["GWallmapu", "FpvrPrensa"],
+["ErnestoRosende", "FpvrPrensa"],
+["VaitiareYaritza", "FpvrPrensa"],
+["detectorxDdd", "FpvrPrensa"],
+["cupidorosado", "FpvrPrensa"],
+["chileconvoca", "FpvrPrensa"],
+["Jaime62448293", "FpvrPrensa"],
+["chicotawers", "FpvrPrensa"],
+["Dantravieso11", "FpvrPrensa"],
+["MarioNorambuen5", "FpvrPrensa"],
+["lelelx", "FpvrPrensa"],
+["defensorianinez", "FpvrPrensa"],
+["mariseka", "FpvrPrensa"],
+["PCdeChile", "FpvrPrensa"],
+["PiensaPrensa", "FpvrPrensa"],
+["inddhh", "FpvrPrensa"],
+["PequeFran", "FpvrPrensa"],
+["catafernandezc", "FpvrPrensa"],
+["Tailer_darden13", "FpvrPrensa"],
+["_pandres", "FpvrPrensa"],
+["ManuelYanezE", "FpvrPrensa"],
+["El_Ciudadano", "FpvrPrensa"],
+["CastilloGumor", "FpvrPrensa"],
+["camilaferavp", "FpvrPrensa"],
+["ElBigDatas", "FpvrPrensa"],
+["DonCosito", "FpvrPrensa"],
+["super_ello", "FpvrPrensa"],
+["RafaelHarvey3", "FpvrPrensa"],
+["FTerritoriosC", "FpvrPrensa"],
+["SCAC_Chile", "FpvrPrensa"],
+["eldesconcierto", "FpvrPrensa"],
+["CarlZapat69", "FpvrPrensa"],
+["HiginiodeCea", "FpvrPrensa"],
+["Madurescente", "FpvrPrensa"],
+["psixjadue", "FpvrPrensa"],
+["CamilaOM_", "FpvrPrensa"],
+["LaRedTV", "FpvrPrensa"],
+["Abeltranc", "FpvrPrensa"],
+["elecciones_epch", "FpvrPrensa"],
+["gabrielbori", "FpvrPrensa"],
+["AnonJaid", "FpvrPrensa"],
+["carmen_hertz", "FpvrPrensa"],
+["daddyyy9954", "FpvrPrensa"],
+["ActivistaEnRRSS", "FpvrPrensa"],
+["CeballosCarola", "FpvrPrensa"],
+["claufav", "FpvrPrensa"],
+["IgualdadPartido", "FpvrPrensa"],
+["Marioacunabuin", "FpvrPrensa"],
+["BundtFantasma", "FpvrPrensa"],
+["tcalderon92", "FpvrPrensa"],
+["patodus", "FpvrPrensa"],
+["leonazul", "FpvrPrensa"],
+["IvetteAleLM", "FpvrPrensa"],
+["Osorninoo", "FpvrPrensa"],
+["lourdeissues", "FpvrPrensa"],
+["luisescobarb", "FpvrPrensa"],
+["MauricioPesutic", "FpvrPrensa"],
+["juanucho2013", "FpvrPrensa"],
+["Natoma11", "FpvrPrensa"],
+["PrensaPopularD", "FpvrPrensa"],
+["PFelizpe", "FpvrPrensa"],
+["bastianmv91", "FpvrPrensa"],
+["MiVozChile", "FpvrPrensa"],
+["la_convergencia", "FpvrPrensa"],
+["elfrente_amplio", "FpvrPrensa"],
+["hugoguionista", "FpvrPrensa"],
+["LavinJoaqui", "FpvrPrensa"],
+["pipediversilife", "FpvrPrensa"],
+["mewuamatarwi", "FpvrPrensa"],
+["FelipeParadaM", "FpvrPrensa"],
+["TomsGallegos", "FpvrPrensa"],
+["BarbaritaEve", "FpvrPrensa"],
+["UnQloMas_", "FpvrPrensa"],
+["espinozacuellar", "FpvrPrensa"],
+["ochovio", "FpvrPrensa"],
+["magenta_RH", "FpvrPrensa"],
+["foraneostereo", "FpvrPrensa"],
+["bastiannacho", "FpvrPrensa"],
+["IavinJoaquin", "FpvrPrensa"],
+["ignaciobriones_", "FpvrPrensa"],
+["LavinJoaquin", "FpvrPrensa"],
+["ascortes", "FpvrPrensa"],
+["Mister_Wolf_0", "FpvrPrensa"],
+["CNNChile", "FpvrPrensa"],
+["vanebeafari", "FpvrPrensa"],
+["Salarmol", "FpvrPrensa"],
+["makanggy", "FpvrPrensa"],
+["hmadariaga1986", "FpvrPrensa"],
+["silvapoblet", "FpvrPrensa"],
+["tresquintos", "FpvrPrensa"],
+["mtamayor", "FpvrPrensa"],
+["upelienta_sss", "FpvrPrensa"],
+["gabrielBoric", "FpvrPrensa"],
+["mmlagoscc", "FpvrPrensa"],
+["altatransmision", "FpvrPrensa"],
+["Chriis_Cortez", "FpvrPrensa"],
+["hsanmv", "FpvrPrensa"],
+["Cambiadechannel", "FpvrPrensa"],
+["MARCELOSILBA", "FpvrPrensa"],
+["diaz_jarolin", "FpvrPrensa"],
+["FerradaRafa", "FpvrPrensa"],
+["MaiteOrsini", "FpvrPrensa"],
+["cdte_venusiana", "FpvrPrensa"],
+["mati_qg", "FpvrPrensa"],
+["Brujalinda4", "FpvrPrensa"],
+["SimonSAn__", "FpvrPrensa"],
+["rparadalillo", "FpvrPrensa"],
+["Angestz", "FpvrPrensa"],
+["RominaMaragano", "FpvrPrensa"],
+["Carla_Amtmann", "FpvrPrensa"],
+["InformaAlMinuto", "FpvrPrensa"],
+["cristianchehade", "FpvrPrensa"],
+["puentecortado6", "FpvrPrensa"],
+["asambleazules", "FpvrPrensa"],
+["Viene_de_ti", "FpvrPrensa"],
+["Rodriggo_QB", "FpvrPrensa"],
+["robertomanzano", "FpvrPrensa"],
+["chilevision", "FpvrPrensa"],
+["vania_mery", "FpvrPrensa"],
+["Soledad4477", "FpvrPrensa"],
+["marcelodiazd", "FpvrPrensa"],
+["karina_ol", "FpvrPrensa"],
+["adrian_goodrich", "FpvrPrensa"],
+["FcoMarcelo", "FpvrPrensa"],
+["CarolinaReyesT", "FpvrPrensa"],
+["Rojafilosofa", "FpvrPrensa"],
+["DanielJadue", "FpvrPrensa"],
+["don_nicotorres", "FpvrPrensa"],
+["Diegovapormas", "FpvrPrensa"],
+["YoBlumen", "FpvrPrensa"],
+["RodrigoSeo", "FpvrPrensa"],
+["feIipeddie", "FpvrPrensa"],
+["CristianGarciaC", "FpvrPrensa"],
+["Karina_Ol", "FpvrPrensa"],
+["KarolCariola", "FpvrPrensa"],
+["GabrielBoric", "FpvrPrensa"],
+["raul_morales", "FpvrPrensa"],
+["CUANTITATIVA_CL", "FpvrPrensa"],
+["desbordes", "FpvrPrensa"],
+["CUANTITATIVA_C", "FpvrPrensa"],
+["gheragor", "GiorgioJackson"],
+["gabrielboric", "GiorgioJackson"],
+["ComandoBoric", "GiorgioJackson"],
+["jwbartlett92", "GiorgioJackson"],
+["conciertoradio", "GiorgioJackson"],
+["adnradiochile", "GiorgioJackson"],
+["jlorenafries", "GiorgioJackson"],
+["danieljadue", "GiorgioJackson"],
+["CNNChile", "GiorgioJackson"],
+["KenaLorenziniL", "GiorgioJackson"],
+["giovannaroa", "GiorgioJackson"],
+["AintzaneLorca", "GiorgioJackson"],
+["valenzuelalevi", "GiorgioJackson"],
+["elmostrador", "GiorgioJackson"],
+["sboric", "GiorgioJackson"],
+["panchofigueroa", "GiorgioJackson"],
+["totiorellanag", "GiorgioJackson"],
+["Valentina_pp7", "GiorgioJackson"],
+["FeministasCS", "GiorgioJackson"],
+["czar_75", "GiorgioJackson"],
+["GiorgioJackson", "GiorgioJackson"],
+["pedroruminot1", "GiorgioJackson"],
+["HortonMario", "GiorgioJackson"],
+["IgnacioAchurra", "GiorgioJackson"],
+["fernando_atria", "GiorgioJackson"],
+["pabloparedesm", "GiorgioJackson"],
+["izkia", "GiorgioJackson"],
+["MarianaLaActriz", "GiorgioJackson"],
+["fotoencampana", "GiorgioJackson"],
+["gabrielbori", "GiorgioJackson"],
+["nicomartineza1", "GiorgioJackson"],
+["Claudia_Mix", "GiorgioJackson"],
+["InzulzaAlberto", "GiorgioJackson"],
+["LatorreJI", "GiorgioJackson"],
+["feliperasa", "GiorgioJackson"],
+["MiguelCrispiS", "GiorgioJackson"],
+["Marce_Sandoval_", "GiorgioJackson"],
+["gonzalowinter", "GiorgioJackson"],
+["desperezoso", "GiorgioJackson"],
+["valeporlachucha", "GiorgioJackson"],
+["ConySchon", "GiorgioJackson"],
+["Chile_Alerta", "GiorgioJackson"],
+["DiegoPardow", "GiorgioJackson"],
+["desbordes", "GiorgioJackson"],
+["ignaciobriones_", "GiorgioJackson"],
+["sebastiansichel", "GiorgioJackson"],
+["IavinJoaqui", "GiorgioJackson"],
+["ionaRothfeld", "GiorgioJackson"],
+["sofiavds", "GiorgioJackson"],
+["sebastianpinera", "GiorgioJackson"],
+["GobiernodeChile", "GiorgioJackson"],
+["matias_astima", "GiorgioJackson"],
+["labeasanchez", "GiorgioJackson"],
+["RDemocratica", "GiorgioJackson"],
+["GabrielBoric", "GiorgioJackson"],
+["leoromerosaez", "GiorgioJackson"],
+["Censelio", "GiorgioJackson"],
+["pancho_era", "GiorgioJackson"],
+["rodrigosepu", "GiorgioJackson"],
+["terepaneque", "GiorgioJackson"],
+["BoricComando", "GiorgioJackson"],
+["jmfuenzalida", "GiorgioJackson"],
+["gteillier", "GiorgioJackson"],
+["cortanews", "GiorgioJackson"],
+["CristianBarri89", "GiorgioJackson"],
+["ppreds86", "GiorgioJackson"],
+["labaialoyer", "GiorgioJackson"],
+["tere_marinovic", "GiorgioJackson"],
+["valitapazsf", "GiorgioJackson"],
+["fabriziocopano", "GiorgioJackson"],
+["seguimospodcast", "GiorgioJackson"],
+["javimartinez_f", "GiorgioJackson"],
+["tv_monica", "GiorgioJackson"],
+["javierapelo_", "GiorgioJackson"],
+["camila_vallejo", "GiorgioJackson"],
+["NicoBohme", "GiorgioJackson"],
+["Naty_campusano", "GiorgioJackson"],
+["elfrente_amplio", "GiorgioJackson"],
+["ManuelYanezE", "GiorgioJackson"],
+["rafa_cavada", "GiorgioJackson"],
+["elisazulue", "GiorgioJackson"],
+["CCuadradoN", "GiorgioJackson"],
+["r_echecopar", "GiorgioJackson"],
+["SebaDepolo", "GiorgioJackson"],
+["LalyPierola", "GiorgioJackson"],
+["Pauta_cl", "GiorgioJackson"],
+["diarioconvos", "GiorgioJackson"],
+["fuentealvarela", "GiorgioJackson"],
+["LoreAlcaldesa", "GiorgioJackson"],
+["VicenteGberner", "GiorgioJackson"],
+["adeurresti", "GiorgioJackson"],
+["emol", "GiorgioJackson"],
+["pepasanmartin", "GiorgioJackson"],
+["nayrailic", "GiorgioJackson"],
+["cotineja", "GiorgioJackson"],
+["junegarcia__", "GiorgioJackson"],
+["Diana47890029", "GiorgioJackson"],
+["OscarContardo", "GiorgioJackson"],
+["RebecaGaeteS", "GiorgioJackson"],
+["conivaldesc", "GiorgioJackson"],
+["NatalyEspin0za", "GiorgioJackson"],
+["PameeCartes", "GiorgioJackson"],
+["dani_carvachod", "GiorgioJackson"],
+["pablowhipple", "GiorgioJackson"],
+["peregrino1977", "GiorgioJackson"],
+["prebolledoe", "GiorgioJackson"],
+["LuciaDammert", "GiorgioJackson"],
+["lavivip", "GiorgioJackson"],
+["connieachurra", "GiorgioJackson"],
+["guororororoi", "GiorgioJackson"],
+["moiseselmago", "GiorgioJackson"],
+["bacigalupe", "GiorgioJackson"],
+["Javii_rayen", "GiorgioJackson"],
+["una_artesana", "GiorgioJackson"],
+["carcamofelipe", "GiorgioJackson"],
+["antonavarrooo", "GiorgioJackson"],
+["briosvan", "GiorgioJackson"],
+["ADignidadCL", "GiorgioJackson"],
+["karina_ol", "GiorgioJackson"],
+["javilopezla", "GiorgioJackson"],
+["ClaudioInostr20", "GiorgioJackson"],
+["Gonzalo33642980", "GiorgioJackson"],
+["PepaHoffmann", "GiorgioJackson"],
+["carmen_hertz", "GiorgioJackson"],
+["JuanVallejosC", "GiorgioJackson"],
+["cristobalotero", "GiorgioJackson"],
+["cristpineda", "GiorgioJackson"],
+["csantander23", "GiorgioJackson"],
+["EmiliaRiosS", "GiorgioJackson"],
+["_ignacio_cruz", "GiorgioJackson"],
+["kath_quevedo", "GiorgioJackson"],
+["la_convergenci", "GiorgioJackson"],
+["maggiportuguez", "GiorgioJackson"],
+["ElMercurio_cl", "GiorgioJackson"],
+["Carla_Amtmann", "GiorgioJackson"],
+["thecliniccl", "GiorgioJackson"],
+["mentiraslared", "GiorgioJackson"],
+["smillaleo", "GiorgioJackson"],
+["Camilohg", "GiorgioJackson"],
+["JMCarvajalG", "GiorgioJackson"],
+["FVillanelo", "GiorgioJackson"],
+["RadioUniverso", "GiorgioJackson"],
+["lesliona", "GiorgioJackson"],
+["pajorque", "GiorgioJackson"],
+["cuevaspato", "GiorgioJackson"],
+["Pedrocig", "GiorgioJackson"],
+["AoLaonline", "GiorgioJackson"],
+["la_convergencia", "GiorgioJackson"],
+["eliana_adams_", "GiorgioJackson"],
+["24HorasTVN", "GiorgioJackson"],
+["negrodanny", "GiorgioJackson"],
+["latercera", "GiorgioJackson"],
+["LoreCabrera", "GiorgioJackson"],
+["mentiraslare", "GiorgioJackson"],
+["lucascmxd", "GiorgioJackson"],
+["fheusser", "GiorgioJackson"],
+["dbmtwtr", "GiorgioJackson"],
+["TomasVodanovic", "GiorgioJackson"],
+["LaPatriaTwitera", "GiorgioJackson"],
+["juanpabloswett", "GiorgioJackson"],
+["MacaRipa", "GiorgioJackson"],
+["pulso_tw", "GiorgioJackson"],
+["tqhdch", "GiorgioJackson"],
+["Tele13_Radio", "sebastiansichel"],
+["PamJiles", "sebastiansichel"],
+["mcubillossigall", "sebastiansichel"],
+["ChileMujeresOrg", "sebastiansichel"],
+["juanpabloswett", "sebastiansichel"],
+["RicardoRincon1", "sebastiansichel"],
+["elmostrador", "sebastiansichel"],
+["fideldiputado", "sebastiansichel"],
+["DiputadaCidV", "sebastiansichel"],
+["berfontaine", "sebastiansichel"],
+["LibertyNewsCL", "sebastiansichel"],
+["infogatecl", "sebastiansichel"],
+["andresmolinam", "sebastiansichel"],
+["Tarapaca_Online", "sebastiansichel"],
+["pamela_poo", "sebastiansichel"],
+["DefendamsChiloe", "sebastiansichel"],
+["thecliniccl", "sebastiansichel"],
+["lucialopezchile", "sebastiansichel"],
+["FpvrPrensa", "sebastiansichel"],
+["sandovalplaza", "sebastiansichel"],
+["frank_sauerbaum", "sebastiansichel"],
+["i_respublica", "sebastiansichel"],
+["ieschile", "sebastiansichel"],
+["RadioUdeC", "sebastiansichel"],
+["pablolirar", "sebastiansichel"],
+["karinluck", "sebastiansichel"],
+["mmlagoscc", "sebastiansichel"],
+["cuevaspato", "sebastiansichel"],
+["coca_vanr", "sebastiansichel"],
+["paulinanu", "sebastiansichel"],
+["cmonckeberg", "sebastiansichel"],
+["tomasfuentes", "sebastiansichel"],
+["EdoDuran", "sebastiansichel"],
+["24HorasTVN", "sebastiansichel"],
+["chahuan", "sebastiansichel"],
+["felipeharboe", "sebastiansichel"],
+["Panchoundurraga", "sebastiansichel"],
+["Cami_FloresO", "sebastiansichel"],
+["ramongallec", "sebastiansichel"],
+["aracelyleuquen", "sebastiansichel"],
+["SAesgener", "sebastiansichel"],
+["ximenaordenes", "sebastiansichel"],
+["Josefcolagos", "sebastiansichel"],
+["alfonsoconcha", "sebastiansichel"],
+["datosnomitos", "sebastiansichel"],
+["jvanbiobio", "sebastiansichel"],
+["DuranDiputado", "sebastiansichel"],
+["vanrysselberghe", "sebastiansichel"],
+["RNchile", "sebastiansichel"],
+["ximerincon", "sebastiansichel"],
+["Diego_Schalper", "sebastiansichel"],
+["NUBLEONLINE_", "sebastiansichel"],
+["sesnaola", "sebastiansichel"],
+["meganoticiascl", "sebastiansichel"],
+["DaniellaCamposL", "sebastiansichel"],
+["felipekast", "sebastiansichel"],
+["ProvosteYasna", "sebastiansichel"],
+["Cooperativa", "sebastiansichel"],
+["HernanLarrain", "sebastiansichel"],
+["fchahin", "sebastiansichel"],
+["ExAlcaldeSoto", "sebastiansichel"],
+["gabrielsilber", "sebastiansichel"],
+["sergiogahona", "sebastiansichel"],
+["jalessandri", "sebastiansichel"],
+["danielverdessi", "sebastiansichel"],
+["andreslongton", "sebastiansichel"],
+["LuisPardoS", "sebastiansichel"],
+["jmfuenzalida", "sebastiansichel"],
+["joannaperezolea", "sebastiansichel"],
+["ANDRESCELISM", "sebastiansichel"],
+["MultigremialN", "sebastiansichel"],
+["arturozunigaj", "sebastiansichel"],
+["izkia", "sebastiansichel"],
+["tv_mauricio", "sebastiansichel"],
+["diputadosantana", "sebastiansichel"],
+["Cadem_cl", "sebastiansichel"],
+["aundurragav", "sebastiansichel"],
+["patriciapolitz", "sebastiansichel"],
+["pablotoloza", "sebastiansichel"],
+["matiaswalkerp", "sebastiansichel"],
+["Clabbem", "sebastiansichel"],
+["erikaoliverad", "sebastiansichel"],
+["evelynmatthei", "sebastiansichel"],
+["calderonismael", "sebastiansichel"],
+["AlessandriFelip", "sebastiansichel"],
+["Orrego", "sebastiansichel"],
+["storrealbaa", "sebastiansichel"],
+["paislobo", "sebastiansichel"],
+["SenadorCastro", "sebastiansichel"],
+["Horade_Noticias", "sebastiansichel"],
+["gzaliasnik", "sebastiansichel"],
+["lilyperez", "sebastiansichel"],
+["TVUNoticias", "sebastiansichel"],
+["CristobalLira", "sebastiansichel"],
+["Rementeria", "sebastiansichel"],
+["diegopaulsen", "sebastiansichel"],
+["gustavoaguayoz", "sebastiansichel"],
+["DiarioConce", "sebastiansichel"],
+["SylviaEyzaguirr", "sebastiansichel"],
+["AlvaroJofre", "sebastiansichel"],
+["BSepulvedaHales", "sebastiansichel"],
+["ElPeriodista", "sebastiansichel"],
+["FMartorell", "sebastiansichel"],
+["CodeXverde", "sebastiansichel"],
+["IgualesChile", "sebastiansichel"],
+["pulso_tw", "sebastiansichel"],
+["AgriculturaFM", "sebastiansichel"],
+["SindicatoCDF", "sebastiansichel"],
+["jorgeerrazuriz", "sebastiansichel"],
+["ConfusamChile", "sebastiansichel"],
+["radiousach", "sebastiansichel"],
+["GiorgioJackson", "sebastiansichel"],
+["jschaulsohn", "sebastiansichel"],
+["desbordes", "sebastiansichel"],
+["rodrigovega", "sebastiansichel"],
+["ipoduje", "sebastiansichel"],
+["StefanKramerS", "sebastiansichel"],
+["melnicksergio", "sebastiansichel"],
+["leoromerosaez", "sebastiansichel"],
+["conciertoradio", "sebastiansichel"],
+["FMDOS", "sebastiansichel"],
+["Pauta_cl", "sebastiansichel"],
+["radio_festival", "sebastiansichel"],
+["ElBoyaldia", "sebastiansichel"],
+["EduardoVergaraB", "sebastiansichel"],
+["danieljadue", "sebastiansichel"],
+["pautalibrelared", "sebastiansichel"],
+["PiensaPrensa", "sebastiansichel"],
+["margaritahantke", "sebastiansichel"],
+["Canal_21tv", "sebastiansichel"],
+["vagoilustrado", "sebastiansichel"],
+["gmanen", "sebastiansichel"],
+["vlnradio", "sebastiansichel"],
+["camila_vallejo", "sebastiansichel"],
+["elcontrastecl", "sebastiansichel"],
+["eltipografo", "sebastiansichel"],
+["CNNChile", "sebastiansichel"],
+["MiguelCrispiS", "sebastiansichel"],
+["CHVNoticias", "sebastiansichel"],
+["CCuadradoN", "sebastiansichel"],
+["Iquiquevision", "sebastiansichel"],
+["JJ_SantaCruz", "sebastiansichel"],
+["pepe_auth", "sebastiansichel"],
+["Chile_Alerta", "sebastiansichel"],
+["mediabanco", "sebastiansichel"],
+["cnashr", "sebastiansichel"],
+["tjholt", "sebastiansichel"],
+["alcaldesoto", "sebastiansichel"],
+["paulfontaineb", "sebastiansichel"],
+["RadioUniverso", "sebastiansichel"],
+["Chile_Alerta", "danieljadue"],
+["GaelDiputada", "danieljadue"],
+["Hugo_Gutierrez_", "danieljadue"],
+["oherrerag", "danieljadue"],
+["gustavoaguayoz", "danieljadue"],
+["gonzalowinter", "danieljadue"],
+["camila_vallejo", "danieljadue"],
+["RDemocratica", "danieljadue"],
+["CaroolMarianne", "danieljadue"],
+["KarolCariola", "danieljadue"],
+["cuevaspato", "danieljadue"],
+["mllanten1", "danieljadue"],
+["GiorgioJackson", "danieljadue"],
+["IgnacioAchurra", "danieljadue"],
+["LatorreJI", "danieljadue"],
+["CCuadradoN", "danieljadue"],
+["jlorenafries", "danieljadue"],
+["RadioUmbral", "danieljadue"],
+["24HorasTVN", "danieljadue"],
+["amaya_alvez", "danieljadue"],
+["gabrielboric", "danieljadue"],
+["Claudia_Mix", "danieljadue"],
+["bruffinelli", "danieljadue"],
+["baradit", "danieljadue"],
+["elmostrador", "danieljadue"],
+["GonzaloMontoyaR", "danieljadue"],
+["sesnaola", "danieljadue"],
+["meganoticiascl", "danieljadue"],
+["Cooperativa", "danieljadue"],
+["Jaime_Bassa", "danieljadue"],
+["AconcaguaNews", "danieljadue"],
+["tv_mauricio", "danieljadue"],
+["radiousach", "danieljadue"],
+["Cadem_cl", "danieljadue"],
+["marcelodiazd", "danieljadue"],
+["RobertoCeledonF", "danieljadue"],
+["CamilaRojas_V", "danieljadue"],
+["IraciHassler", "danieljadue"],
+["LaPatriaTwitera", "danieljadue"],
+["infogatecl", "danieljadue"],
+["El_Ciudadano", "danieljadue"],
+["BSepulvedaHales", "danieljadue"],
+["valenzuelalevi", "danieljadue"],
+["DefendamsChiloe", "danieljadue"],
+["ElPeriodista", "danieljadue"],
+["calderonismael", "danieljadue"],
+["ccifuentesh", "danieljadue"],
+["JosAndrsMurillo", "danieljadue"],
+["tomasfuentes", "danieljadue"],
+["pablolirar", "danieljadue"],
+["CalamaVelasquez", "danieljadue"],
+["tomashirsch", "danieljadue"],
+["elfrente_amplio", "danieljadue"],
+["ADignidadCL", "danieljadue"],
+["FpvrPrensa", "danieljadue"],
+["CodeXverde", "danieljadue"],
+["AprueboYungay", "danieljadue"],
+["AcueOficial", "danieljadue"],
+["FteSindicalNMA", "danieljadue"],
+["mmlagoscc", "danieljadue"],
+["DMonteverdeR", "danieljadue"],
+["FTETRABJADORES", "danieljadue"],
+["berfontaine", "danieljadue"],
+["SCAC_Chile", "danieljadue"],
+["CatalinaPerezS", "danieljadue"],
+["jgalemparte", "danieljadue"],
+["claudiobustios", "danieljadue"],
+["PoliticayRS", "danieljadue"],
+["labeasanchez", "danieljadue"],
+["Natajoignant", "danieljadue"],
+["Ma_joseOyarzun", "danieljadue"],
+["Surterritori", "danieljadue"],
+["juanpabloswett", "danieljadue"],
+["elbrujo", "danieljadue"],
+["SindicatoCDF", "danieljadue"],
+["FIMA_Chile", "danieljadue"],
+["storrealbaa", "danieljadue"],
+["andresmolinam", "danieljadue"],
+["margaritahantke", "danieljadue"],
+["biobio", "danieljadue"],
+["giovannaroa", "danieljadue"],
+["i_respublica", "danieljadue"],
+["felipekast", "danieljadue"],
+["ObservatorioC", "danieljadue"],
+["pcayuqueo", "danieljadue"],
+["glorianaveillan", "danieljadue"],
+["LandeckH", "danieljadue"],
+["desbordes", "danieljadue"],
+["ColegioProfes", "danieljadue"],
+["NDsindical", "danieljadue"],
+["SurHbs", "danieljadue"],
+["javiparada", "danieljadue"],
+["pamela_poo", "danieljadue"],
+["DocVictorTorres", "danieljadue"],
+["matiasasun", "danieljadue"],
+["daniel_nunez_a", "danieljadue"],
+["elchedelosgays", "danieljadue"],
+["danieljadue", "danieljadue"],
+["PCdeChile", "danieljadue"],
+["jjcc_chile", "danieljadue"],
+["pautalibrelared", "danieljadue"],
+["Pauta_cl", "danieljadue"],
+["ElBoyaldia", "danieljadue"],
+["EduardoVergaraB", "danieljadue"],
+["ProvosteYasna", "danieljadue"],
+["sebastiansichel", "danieljadue"],
+["LavinJoaquin", "danieljadue"],
+["ignaciobriones_", "danieljadue"],
+["paulanarvaezo", "danieljadue"],
+["MaldonadoCurti", "danieljadue"],
+["carmen_hertz", "danieljadue"],
+["PamJiles", "danieljadue"],
+["cnashr", "danieljadue"],
+["lucialopezchile", "danieljadue"],
+["preuss_cl", "danieljadue"],
+["FelipeParadaM", "danieljadue"],
+["Felixecologista", "danieljadue"],
+["PiensaPrensa", "danieljadue"],
+["LibertyNewsCL", "danieljadue"],
+["alejandramatus", "danieljadue"],
+["ElfiltradorCl", "danieljadue"],
+["jorgeerrazuriz", "danieljadue"],
+["thecliniccl", "danieljadue"],
+["RNuevoMundo", "danieljadue"],
+["patriciapolitz", "danieljadue"],
+["Chileokulto", "danieljadue"],
+["conivaldesc", "danieljadue"],
+["pablovidalrojas", "danieljadue"],
+["LuciaDammert", "danieljadue"],
+["PaulaMendoza", "danieljadue"],
+["renenaranjo", "danieljadue"],
+["eltipografo", "danieljadue"],
+["amarolabra", "danieljadue"],
+["Pajarobere", "danieljadue"],
+["gonzalomartner", "danieljadue"],
+["guidogirardi", "danieljadue"],
+["felipeharboe", "danieljadue"],
+];
+}
+
+</script>
+
