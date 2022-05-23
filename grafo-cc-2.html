@@ -1,0 +1,914 @@
+<script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
+     <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/e9d941381475b5df8b7d7691013401e171014e89/FileSaver.min.js"></script>
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+ 
+    <!--<script src="d3.layout.cloudv2.js"></script>-->
+
+        <style>
+    .node {
+      stroke-width: 1.5px;
+    }
+
+    .link {
+      stroke: #999;
+      stroke-opacity: .6;
+    }
+
+    #contenedorGrafo {
+      width: 1500px;
+      height: 1500px;
+      overflow: auto;
+      border:1px solid #C0C0C0;
+    }
+
+    #div1622511470071 {
+      width: 2500px;
+      height: 2500px;
+    }
+
+    </style>
+<div>
+<button id='saveButton'>Export my D3 visualization to PNG</button>
+</div>
+<div id="contenedorGrafo">    
+    <div id="div1622511470071"></div>
+</div>
+
+<div id='PopUp' style='display: none; position: absolute; left: 0px; top: 0px; border: solid gray 1px; padding: 10px; background-color: black; text-align: justify; font-size: 12px; color: white; width: 135px; '>
+  <center id='PopUpText'>TEXT</center>
+</div>
+
+
+<script>
+
+var myWindow;
+var svg;
+var width = 2500;
+var height = 2500;
+var lstEnlacesRaw = [];
+var duplaOrigenDest = [];
+var arrowSize = [ 0, 3, 3, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6];
+var maxv = 0;
+
+// Set-up the export button
+d3.select('#saveButton').on('click', function(){
+    var svgString = getSVGString(svg.node());
+    svgString2Image( svgString, 2*width, 2*height, 'png', save ); // passes Blob and filesize String to the callback
+
+    function save( dataBlob, filesize ){
+        saveAs( dataBlob, 'D3 vis exported to PNG.png' ); // FileSaver.js function
+    }
+});
+// Below are the functions that handle actual exporting:
+// getSVGString ( svgNode ) and svgString2Image( svgString, width, height, format, callback )
+function getSVGString( svgNode ) {
+    svgNode.setAttribute('xlink', 'http://www.w3.org/1999/xlink');
+    var cssStyleText = getCSSStyles( svgNode );
+    appendCSS( cssStyleText, svgNode );
+
+    var serializer = new XMLSerializer();
+    var svgString = serializer.serializeToString(svgNode);
+    svgString = svgString.replace(/(\w+)?:?xlink=/g, 'xmlns:xlink='); // Fix root xlink without namespace
+    svgString = svgString.replace(/NS\d+:href/g, 'xlink:href'); // Safari NS namespace fix
+
+    return svgString;
+
+    function getCSSStyles( parentElement ) {
+        var selectorTextArr = [];
+
+        // Add Parent element Id and Classes to the list
+        selectorTextArr.push( '#'+parentElement.id );
+        for (var c = 0; c < parentElement.classList.length; c++)
+                if ( !contains('.'+parentElement.classList[c], selectorTextArr) )
+                    selectorTextArr.push( '.'+parentElement.classList[c] );
+
+        // Add Children element Ids and Classes to the list
+        var nodes = parentElement.getElementsByTagName("*");
+        for (var i = 0; i < nodes.length; i++) {
+            var id = nodes[i].id;
+            if ( !contains('#'+id, selectorTextArr) )
+                selectorTextArr.push( '#'+id );
+
+            var classes = nodes[i].classList;
+            for (var c = 0; c < classes.length; c++)
+                if ( !contains('.'+classes[c], selectorTextArr) )
+                    selectorTextArr.push( '.'+classes[c] );
+        }
+
+        // Extract CSS Rules
+        var extractedCSSText = "";
+        for (var i = 0; i < document.styleSheets.length; i++) {
+            var s = document.styleSheets[i];
+            
+            try {
+                if(!s.cssRules) continue;
+            } catch( e ) {
+                    if(e.name !== 'SecurityError') throw e; // for Firefox
+                    continue;
+                }
+
+            var cssRules = s.cssRules;
+            for (var r = 0; r < cssRules.length; r++) {
+                if ( contains( cssRules[r].selectorText, selectorTextArr ) )
+                    extractedCSSText += cssRules[r].cssText;
+            }
+        }
+        
+
+        return extractedCSSText;
+
+        function contains(str,arr) {
+            return arr.indexOf( str ) === -1 ? false : true;
+        }
+
+    }
+
+    function appendCSS( cssText, element ) {
+        var styleElement = document.createElement("style");
+        styleElement.setAttribute("type","text/css"); 
+        styleElement.innerHTML = cssText;
+        var refNode = element.hasChildNodes() ? element.children[0] : null;
+        element.insertBefore( styleElement, refNode );
+    }
+}
+
+
+function svgString2Image( svgString, width, height, format, callback ) {
+    var format = format ? format : 'png';
+
+    var imgsrc = 'data:image/svg+xml;base64,'+ btoa( unescape( encodeURIComponent( svgString ) ) ); // Convert SVG string to data URL
+
+    var canvas = document.createElement("canvas");
+    var context = canvas.getContext("2d");
+ 
+
+    canvas.width = width;
+    canvas.height = height;
+
+    var image = new Image();
+    image.onload = function() {
+        context.clearRect ( 0, 0, width, height );
+        context.fillStyle = "white";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, width, height);
+
+        canvas.toBlob( function(blob) {
+            var filesize = Math.round( blob.length/1024 ) + ' KB';
+            if ( callback ) callback( blob, filesize );
+        });
+
+        
+    };
+
+    image.src = imgsrc;
+}
+
+function genStrJsonNodosyLinks(lstEnlacesRaw)
+{
+   var origen, destino, sep, s;
+   var nodo = new Array();
+   var lnkEntrantes = new Array();
+
+   for(var i = 0; i < lstEnlacesRaw.length; i++) {
+
+      if(nodo.indexOf(lstEnlacesRaw[i][0]) < 0) {
+         nodo.push(lstEnlacesRaw[i][0]);
+      }
+
+      if(nodo.indexOf(lstEnlacesRaw[i][1]) < 0) {
+         nodo.push(lstEnlacesRaw[i][1]); 
+      }
+
+      destino = nodo.indexOf(lstEnlacesRaw[i][1]);
+      if(!lnkEntrantes[destino]) {
+         lnkEntrantes[destino] = 0;
+      }
+      lnkEntrantes[destino] = lnkEntrantes[destino] + 1;
+   }
+
+ 
+
+   s = '{"nodes":[';
+  
+   for(var i = 0; i < nodo.length; i++) {
+      if(!lnkEntrantes[i]){
+        lnkEntrantes[i] = 0;
+      }
+      sep = (i == (nodo.length - 1))? '' : ',';
+      if (lnkEntrantes[i] > maxv) maxv = lnkEntrantes[i];
+      s = s + '{"name":"' + nodo[i] + '", "group":' + lnkEntrantes[i] + ', "id":' + i + '}' + sep;
+   }
+   console.log('maxv  '+maxv)
+   s = s + '], "links":[';
+
+   for(var i = 0; i < lstEnlacesRaw.length; i++) {
+      sep = (i == (lstEnlacesRaw.length - 1))? '' : ',';
+      origen = nodo.indexOf(lstEnlacesRaw[i][0]);
+      destino = nodo.indexOf(lstEnlacesRaw[i][1]);
+     
+      s = s + '{"source":' + origen + ',"target":' + destino + ',"value":2}' + sep;
+   }
+
+   s = s + ']}';
+   return s;
+}
+
+
+function creaGrafoSocial(idDiv)
+{
+    var strJson = genStrJsonNodosyLinks(lstEnlacesRaw);
+    var dataJSON = JSON.parse(strJson);
+
+    
+
+    var color = d3.scale.category20c();
+
+    var force = d3.layout.force()
+         .charge(-200)  
+        .linkDistance(60)
+        .size([width, height]);
+
+    svg = d3.select("#" + idDiv).append("svg")  
+        .attr('viewBox','0 0 ' + width + ' ' + height)
+
+        .attr('preserveAspectRatio','xMinYMin');
+
+/*
+     svg.append("defs").append("marker")
+        .attr("id", "arrowhead")
+        .attr("refX", 6 + 4) 
+        .attr("refY", 2)
+        .attr("markerWidth", 8)
+        .attr("markerHeight", 8)
+        .attr("orient", "auto")
+        .append("path")
+        .attr("d", "M 0,0 V 4 L6,2 Z");    
+
+   */
+    var graph = dataJSON;
+
+    force
+        .nodes(graph.nodes)
+        .links(graph.links)
+        .start();
+
+    var link = svg.selectAll("line.link")
+        .data(graph.links)
+        .enter().append("line")
+        
+        .attr("class",  function(d) {
+            //console.log("link source-" + d.source.id + " target-" + d.target.id);
+            return "link source-" + d.source.id + " target-" + d.target.id;
+        })
+        .attr("marker-end", "url(#arrowhead)") 
+        .style("stroke-width", 0.2);
+
+    var f = d3.scale.category10();
+        var g = d3.scale.category20();
+        var h = d3.scale.category20b();
+        var ii = d3.scale.category20c();
+
+        var colorScales = [f,g,h,ii];
+        var colorLen = [10,20,20,20];
+
+        var PRGn = ["#40004b","#762a83","#9970ab","#c2a5cf","#e7d4e8","#f7f7f7","#d9f0d3","#a6dba0","#5aae61","#1b7837","#00441b"];
+
+        var RdYlGn = ["#a50026","#d73027","#f46d43","#fdae61","#fee08b","#ffffbf","#d9ef8b","#a6d96a","#66bd63","#1a9850","#006837", "#40004b","#762a83","#9970ab","#c2a5cf","#e7d4e8","#f7f7f7","#d9f0d3","#a6dba0","#5aae61","#1b7837","#00441b", "#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33","#a65628","#f781bf","#999999","#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f","#e5c494","#b3b3b3", '#d72631', '#a2d5c6', '#077b8a' , '#5c3c92', '#e2d810','#d9138a','#12a4d9','#322e2f', '#f3ca20', '#cf1578', '#e8d21d', '#039fbe', '#b20238', '#e75874', '#be1558', '#fbcbc9', '#322514'];
+        console.log("colores " + RdYlGn.length)
+        RdYlGn = shuffle(RdYlGn)
+    var node = svg.selectAll(".node")
+        .data(graph.nodes)
+
+        .enter().append("circle")
+        .attr("class", "node")
+        
+        .attr("r", function(d) { 
+            var val = d.group;
+            //console.log("-----   "+val)
+            return 15*normalize(val, maxv, 0)+3; 
+        })
+        .style("fill", function(d) { 
+            
+            return RdYlGn[d.group]; })
+
+        .each(function(d) { this.id = 'nodo_' + d.id; })      
+
+        .on("mouseover", function(d,i) { 
+              var el;
+
+              
+              document.getElementById('PopUpText').innerHTML = d.name + ' - ' + d.group;
+              el = document.getElementById('PopUp')        
+
+              
+
+              el.style.left = ( d3.event.pageX - 100) + "px";
+              el.style.top = ( d3.event.pageY - 100) + "px";        
+              el.style.display = 'block';
+
+             
+
+              svg.selectAll("line.link.target-" + d.id).classed("target", true).style("stroke", 'red'); 
+              svg.selectAll("line.link.source-" + d.id).classed("source", true).style("stroke", 'green');
+        })
+
+        .on("click", function(d,i) {  
+              var el, x, y;
+
+             
+              document.getElementById('PopUpText').innerHTML = d.name;
+              el = document.getElementById('PopUp')        
+              el.style.left = d.x + "px";
+              el.style.top = d.y + "px";        
+              el.style.display = 'block';
+
+              
+               var sUsr, sUrl;
+               sUsr = d.name;
+               sUsr = sUsr.substring(1, sUsr.length);
+               sUrl = "https://twitter.com/intent/user?screen_name=" + sUsr;
+
+               if(myWindow) {
+                  myWindow.close();
+               }
+
+               //myWindow = window.open(sUrl, "", "width=550,height=520,left=450,top=150");
+               
+        })
+
+        .on("mouseout", function(d)
+        {
+              
+              document.getElementById('PopUp').style.display = 'none';
+
+              svg.selectAll("line.link.target-" + d.id).classed("target", false).style("stroke", "#CCC");;
+              svg.selectAll("line.link.source-" + d.id).classed("source", false).style("stroke", "#CCC");
+        })
+
+        .call(force.drag);
+
+ 
+
+    force.on("tick", function() {
+      link.attr("x1", function(d) { return d.source.x; })
+          .attr("y1", function(d) { return d.source.y; })
+          .attr("x2", function(d) { return d.target.x; })
+          .attr("y2", function(d) { return d.target.y; });
+
+      node.attr("cx", function(d) { return d.x; })
+          .attr("cy", function(d) { return d.y; });
+    });
+
+}
+
+
+function normalize(val, max, min) { return (val - min) / (max - min); }
+function centrarDivEnViewport(idDiv, idDivViewport) 
+{
+   var divViewport = document.getElementById(idDivViewport);
+   var div = document.getElementById(idDiv);
+
+   var maxScrollLeft = div.offsetWidth - divViewport.offsetWidth;
+   var maxScrollTop = div.offsetHeight - divViewport.offsetHeight;
+
+   divViewport.scrollTop = maxScrollTop/2;
+   divViewport.scrollLeft = maxScrollLeft/2;
+}
+
+ 
+window.onload = function() 
+{
+     Def_lstEnlacesRaw();
+     creaGrafoSocial("div1622511470071");
+     centrarDivEnViewport("div1622511470071", "contenedorGrafo") 
+}
+function shuffle(array) {
+  var currentIndex = array.length,  randomIndex;
+
+  // While there remain elements to shuffle...
+  while (0 !== currentIndex) {
+
+    // Pick a remaining element...
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+
+    // And swap it with the current element.
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex], array[currentIndex]];
+  }
+
+  return array;
+}
+
+function Def_lstEnlacesRaw()
+{
+  
+  lstEnlacesRaw =  
+  [
+["TERRITORIAL", "COMPETENCIAS"],
+["RECIBIDO", "PRESIDENTE"],
+["CONSTITUCION", "CONCEJO"],
+["ACUERDO", "DIRECCION"],
+["TODA", "CONGRESO"],
+["INHABILIDADES", "PODRA"],
+["PODRAN", "NACIONALIDAD"],
+["CHILE", "EJECUCION"],
+["SERVICIOS", "DERECHOS"],
+["DERECHOS", "NATURALEZA"],
+["ARTICULO", "ESTABLECIMIENTOS"],
+["GESTION", "CORRESPONDERA"],
+["C", "DIRECCION"],
+["CONSTITUCION", "QUATER"],
+["TODAS", "DEBER"],
+["CHILE", "DERECHO"],
+["POPULAR", "CONCEJO"],
+["SISTEMA", "TODAS"],
+["CONSTITUCIONAL", "CONTROL"],
+["DERECHOS", "DERECHO"],
+["LAICO", "EJERCICIO"],
+["PRESIDENTA", "ASAMBLEA"],
+["C", "EMPRESTITO"],
+["FUERZAS", "EDUCACION"],
+["SOLO", "ESTABLECIMIENTOS"],
+["PROCEDIMIENTO", "PRINCIPIO"],
+["PRINCIPIO", "DEBER"],
+["SERVICIOS", "INHABILIDADES"],
+["ENFERMEDAD", "PRESIDENTE"],
+["PRESIDENTE", "GOBIERNO"],
+["TRIBUNALES", "PLURINACIONALIDAD"],
+["ESTABLECIDO", "COMPETENCIAS"],
+["PERSONAS", "MINISTERIO"],
+["MATERIAS", "CONSEJO"],
+["DIRECCION", "FUNCION"],
+["VOTACIONES", "DERECHO"],
+["INTEGRANTES", "INTEGRACION"],
+["POLITICA", "CHILE"],
+["ELECCION", "IMPEDIMENTOS"],
+["TRIBUNALES", "MECANISMOS"],
+["CONCEJO", "PUEBLOS"],
+["ORGANO", "CONSEJO"],
+["DEBERES", "ACCESO"],
+["AUTONOMIA", "DEBERA"],
+["MEDIDAS", "CORRESPONDERA"],
+["CONGRESO", "OBJETO"],
+["CATASTROFE", "DEBERA"],
+["MINISTERIO", "FORMA"],
+["ESPECIAL", "NUEVO"],
+["ACCESO", "DERECHOS"],
+["LIMITACIONES", "DERECHO"],
+["CONSTITUCION", "ACCION"],
+["SOSTENIBILIDAD", "OBJETO"],
+["OBJETO", "ADMINISTRACION"],
+["COMISION", "LEY"],
+["NOMBRAMIENTOS", "CONSTITUCION"],
+["LEY", "OBJETO"],
+["NINGUN", "LEY"],
+["BANCO", "SOLO"],
+["INTEGRACION", "PRINCIPIOS"],
+["FINES", "DERECHO"],
+["CORRESPONDENCIA", "PODRA"],
+["NOMBRAMIENTOS", "PUBLICO"],
+["ORGANOS", "ESTATUTO"],
+["FORMA", "ATRIBUCIONES"],
+["CONGRESO", "COMISION"],
+["MINISTERIO", "FUNCION"],
+["ESTABLECIDO", "PROCEDIMIENTO"],
+["ESTABLECIDO", "LEYES"],
+["ESTABLECIMIENTOS", "PERSONAS"],
+["LEYES", "PODRA"],
+["DERECHOS", "DERECHOS"],
+["DETERMINE", "ORGANIZACION"],
+["PUBLICA", "NUEVO"],
+["TRIBUNAL", "TRIBUNALES"],
+["ELECCION", "PROCESO"],
+["SOCIAL", "DEMOCRACIA"],
+["ENFERMEDAD", "PRESIDENTA"],
+["GENERO", "RELACIONES"],
+["CARGO", "FUERZAS"],
+["NATURALEZA", "PRINCIPIOS"],
+["DERECHOS", "AUTONOMIA"],
+["TERRITORIO", "ELEGIDA"],
+["ESTABLECER", "DIFERENCIACION"],
+["FORMACION", "CORRESPONDERA"],
+["REGLAMENTOS", "PODRAN"],
+["RECLAMACION", "ACCION"],
+["PROYECTO", "SERAN"],
+["PRESIDENTE", "CONGRESO"],
+["CHILE", "NINGUNA"],
+["SERA", "PODRAN"],
+["CONSEJO", "RESPONSABILIDAD"],
+["MINISTERIO", "CONSTITUCION"],
+["RESPONSABILIDAD", "ACCESO"],
+["REGLAMENTOS", "PRESIDENTA"],
+["PRESIDENTE", "PROYECTO"],
+["GESTION", "DEBERA"],
+["ESTABLECER", "EQUIDAD"],
+["DEBER", "EQUIDAD"],
+["COMPOSICION", "INHABILIDADES"],
+["SOLO", "DESARROLLO"],
+["ENTIDADES", "RECONOCE"],
+["CONGRESO", "IMPEDIMENTOS"],
+["ELEGIDA", "PRESIDENTA"],
+["ESTABLECERA", "NINGUNA"],
+["SERVICIO", "PODRAN"],
+["COMPOSICION", "MEDIOS"],
+["CAMARA", "CONVOCATORIA"],
+["OBLIGACION", "EMPRESTITO"],
+["ESTABLECERA", "ORGANIZACION"],
+["PLENO", "CHILE"],
+["TERRITORIALES", "DEBERES"],
+["COMPETENCIA", "DERECHOS"],
+["PRINCIPIO", "CONSEJO"],
+["PUBLICO", "CESARA"],
+["MINISTRAS", "CONGRESO"],
+["PUBLICIDAD", "PODRA"],
+["ESTATUTO", "DEMAS"],
+["PRINCIPIOS", "TRIBUTOS"],
+["DIPUTADAS", "RESPONSABILIDAD"],
+["REGIONALES", "COMPETENCIAS"],
+["TRANSPARENCIA", "TRIBUTOS"],
+["ESPECIAL", "PODRAN"],
+["ROL", "LEY"],
+["REGIONAL", "PUEBLOS"],
+["INFORMACION", "GOBIERNO"],
+["ELABORACION", "DEBERA"],
+["FINALIDAD", "FORMA"],
+["NACIONALIDAD", "CHILE"],
+["PARTICIPACION", "RECONOCE"],
+["JEFATURA", "DERECHO"],
+["DEBERA", "PRESIDENTA"],
+["CONDICIONES", "COMPETENCIAS"],
+["PROCEDIMIENTO", "PROCEDIMIENTO"],
+["DIRECCION", "SISTEMA"],
+["INGRESOS", "PROYECTO"],
+["ORGANIZACION", "DERECHOS"],
+["LEYES", "ENTIDADES"],
+["PATRIMONIOS", "SOLO"],
+["ASIMISMO", "SOLO"],
+["TER", "DIPUTADAS"],
+["CAMARA", "CORRESPONDE"],
+["PROCEDIMIENTOS", "REGIONES"],
+["GOBIERNO", "CONGRESO"],
+["MANERA", "SERVICIOS"],
+["MAS", "COMPETENCIAS"],
+["PARTICIPACION", "CENTROS"],
+["MINISTERIOS", "PROCEDIMIENTO"],
+["ACCION", "PODRAN"],
+["CUMPLIMIENTO", "PUEBLOS"],
+["POLICIAS", "TRANSPARENCIA"],
+["EJERCICIO", "ACCION"],
+["LEY", "TODA"],
+["EQUIDAD", "ACCESO"],
+["SOLO", "PODRA"],
+["RECIBIDO", "CONGRESO"],
+["MEDIDAS", "COMPETENCIA"],
+["G", "CONSTITUCION"],
+["POLITICAS", "TRIBUNAL"],
+["ASAMBLEA", "CONGRESO"],
+["INTERES", "ADMINISTRACION"],
+["PUBLICO", "DIRECCION"],
+["PROTECCION", "PODRAN"],
+["ORGANO", "CONCEJO"],
+["ASOCIATIVIDAD", "FUNCION"],
+["ASEGURA", "TER"],
+["FUNCIONES", "CORTE"],
+["RESPECTO", "CANDIDATOS"],
+["CONSTITUCION", "CONTROL"],
+["TENDRA", "LEY"],
+["DIPUTADOS", "CONVOCATORIA"],
+["DEBERA", "DEMOCRACIA"],
+["SOLO", "COMPETENCIAS"],
+["FUERZAS", "TRANSPARENCIA"],
+["DERECHO", "PROTECCION"],
+["CONFORMIDAD", "DEFENSORIA"],
+["DEBERES", "DESARROLLO"],
+["COMISION", "FUNCIONES"],
+["DERECHOS", "PRESIDENTA"],
+["ORGANOS", "ORGANIZACION"],
+["DESARROLLO", "INTEGRACION"],
+["ACUERDO", "BIS"],
+["DIPUTADOS", "ATRIBUCIONES"],
+["FUERO", "LIBERTAD"],
+["REGULARA", "ASAMBLEA"],
+["LEY", "PERSONAS"],
+["LIBERTAD", "DEBE"],
+["ORGANIZACION", "IGUALDAD"],
+["INSTITUCIONES", "SERVICIOS"],
+["ELECCIONES", "CONGRESO"],
+["MEDIDAS", "ORGANIZACIONES"],
+["COMPETENCIAS", "MECANISMOS"],
+["PROBIDAD", "PROTECCION"],
+["TRANSPARENCIA", "DEBERA"],
+["PROYECTOS", "PROYECTOS"],
+["DERECHOS", "INICIATIVA"],
+["FUNCIONAMIENTO", "ASAMBLEA"],
+["FINANCIAMIENTO", "MEDIOS"],
+["ESTATUTO", "ORGANIZACION"],
+["NACIONAL", "PRINCIPIO"],
+["FUNCIONES", "EJERCICIO"],
+["COMISION", "DERECHOS"],
+["CIUDADANIA", "LIBERTAD"],
+["SOLO", "CONCEJO"],
+["INTEGRACION", "SERA"],
+["PODRAN", "DIPUTADAS"],
+["RESPETO", "POLICIAS"],
+["REGULARA", "CONSEJO"],
+["ASAMBLEA", "ATRIBUCIONES"],
+["MINISTERIO", "PRINCIPIO"],
+["PARTICIPACION", "DEBERAN"],
+["ACCESO", "LEY"],
+["CONSTITUCION", "CREACION"],
+["AUTORIDAD", "NACIONALIDAD"],
+["IMPEDIMENTOS", "DIPUTADAS"],
+["CONSEJO", "PRESIDENTE"],
+["MECANISMOS", "SOLIDARIDAD"],
+["CARACTER", "FUERZAS"],
+["PARTICIPACION", "ADMINISTRACION"],
+["IMPUGNACIONES", "JUSTICIA"],
+["LIBERTAD", "PERSONA"],
+["QUINQUIES", "EDUCACION"],
+["POLITICAS", "BIS"],
+["MINISTERIO", "POLICIAS"],
+["COOPERACION", "INTEGRACION"],
+["EJECUCION", "GOBIERNO"],
+["QUINQUIES", "AUTONOMIA"],
+["GARANTIAS", "DEMOCRACIA"],
+["ORGANIZACIONES", "TRIBUNAL"],
+["RESPECTO", "LEY"],
+["POLICIAS", "EDUCACION"],
+["ELABORACION", "DERECHOS"],
+["INTEGRANTES", "RECIBIDO"],
+["INTEGRACION", "CONSEJO"],
+["TERRITORIO", "GOBIERNO"],
+["DISPUESTO", "DIPUTADAS"],
+["PERSONAS", "ORGANIZACIONES"],
+["TER", "PROCESO"],
+["COMPETENCIAS", "EDUCACION"],
+["CARGO", "ATRIBUCIONES"],
+["VOTACIONES", "PERSONAS"],
+["PUBLICA", "POLICIAS"],
+["PRINCIPIOS", "DESARROLLO"],
+["TITULARIDAD", "PUEBLOS"],
+["TER", "CONGRESO"],
+["SUPREMACIA", "COMPETENCIAS"],
+["DEFENSA", "PODRAN"],
+["INHABILIDADES", "INHABILIDADES"],
+["CONCEJO", "SOLO"],
+["FORMA", "PROTECCION"],
+["PLURINACIONALIDAD", "CONSEJO"],
+["DEMAS", "SERAN"],
+["TRIBUNAL", "DEBERAN"],
+["CONSTITUCION", "DIRECCION"],
+["REGIONALES", "ELECCIONES"],
+["FINANCIAMIENTO", "CREACION"],
+["PROCESO", "ACCION"],
+["BIS", "EQUIDAD"],
+["DEMOCRACIA", "DEMOCRACIA"],
+["HUMANOS", "CORRESPONDE"],
+["BIENES", "LEY"],
+["MEDIANTE", "DERECHO"],
+["SERVICIO", "CORTE"],
+["VOTACIONES", "LEY"],
+["CONTRALORIAS", "ORGANIZACION"],
+["PLURALISMO", "MECANISMOS"],
+["SERA", "CONVOCATORIA"],
+["C", "LEYES"],
+["JURIDICA", "CONTRALORIA"],
+["JURIDICA", "ENTIDADES"],
+["SISTEMA", "DEBERA"],
+["MINISTERIO", "DIRECCION"],
+["INICIATIVA", "PROCESO"],
+["EDUCACION", "NATURALEZA"],
+["REPRESENTANTES", "TER"],
+["DETERMINARA", "PRINCIPIO"],
+["PROYECTOS", "CONSEJO"],
+["CORTES", "ELEGIDA"],
+["LEY", "REGIONES"],
+["ESTABLECERA", "DERECHOS"],
+["TUTELA", "CONSTITUCION"],
+["PROTECCION", "PRINCIPIO"],
+["PRINCIPIO", "JUSTICIA"],
+["SEA", "CONGRESO"],
+["REGLAMENTOS", "ATRIBUCIONES"],
+["AUTORIDAD", "PROTECCION"],
+["LEY", "PODRA"],
+["TRIBUNALES", "ADMINISTRACION"],
+["PRINCIPIO", "PODRAN"],
+["COMPETENCIAS", "TODAS"],
+["X", "INSTITUCIONES"],
+["TODAS", "CONSEJO"],
+["REGIONAL", "RECIBIDO"],
+["DERECHOS", "PODRA"],
+["INCISO", "CHILE"],
+["COMPETENCIA", "POLICIAS"],
+["PRINCIPIOS", "BIS"],
+["MANERA", "PRINCIPIO"],
+["PROCEDIMIENTOS", "BIS"],
+["CUMPLIMIENTO", "MINISTERIO"],
+["PRINCIPIO", "PARTICIPACION"],
+["PODRA", "LEY"],
+["LEY", "VOTACIONES"],
+["FINANCIAMIENTO", "EMPRESTITO"],
+["REGIONAL", "REGIONAL"],
+["COOPERACION", "PUEBLOS"],
+["REPUBLICA", "POTESTAD"],
+["TERRITORIAL", "ROL"],
+["JUSTICIA", "COMPETENCIA"],
+["DIRECCION", "CONSTITUCION"],
+["PROMOVER", "PARTICIPACION"],
+["CHILE", "BIENES"],
+["SOLIDARIDAD", "PODRAN"],
+["ESTABLEZCA", "FUERZAS"],
+["POLITICA", "ATRIBUCIONES"],
+["POPULAR", "COMISION"],
+["TERRITORIO", "ENTIDADES"],
+["NINGUNA", "BIS"],
+["INICIATIVA", "CONGRESO"],
+["RELACIONES", "PRINCIPIOS"],
+["NINGUNA", "SUPREMACIA"],
+["CONGRESO", "EJECUCION"],
+["PRESIDENTA", "SOLO"],
+["AREAS", "SISTEMA"],
+["CAUSALES", "JUSTICIA"],
+["POLICIAS", "DERECHO"],
+["GENERAL", "ENTIDADES"],
+["POLITICA", "PUEBLOS"],
+["ESCANOS", "PERSONAS"],
+["POTESTAD", "BIENES"],
+["CENTROS", "QUATER"],
+["PETICION", "EJERCICIO"],
+["PRINCIPIO", "ESTATUTO"],
+["CONDICIONES", "IGUALDAD"],
+["CASOS", "LEY"],
+["ESTOS", "CONGRESO"],
+["AUTONOMIA", "DERECHO"],
+["ESTABLEZCA", "CHILE"],
+["RECURSOS", "DERECHO"],
+["INTERNACIONALES", "PLURINACIONALIDAD"],
+["PRINCIPIOS", "PLURINACIONALIDAD"],
+["ESTABLECIDO", "FUERZAS"],
+["CAMARA", "SERAN"],
+["FORMA", "TRIBUNALES"],
+["ESTABLEZCA", "INTEGRACION"],
+["DERECHOS", "ORGANIZACION"],
+["TER", "LEYES"],
+["CARACTER", "TODAS"],
+["INDIGENAS", "FUNCION"],
+["TODAS", "PRINCIPIOS"],
+["PRINCIPIO", "SERA"],
+["EQUIDAD", "SOLIDARIDAD"],
+["DIPUTADAS", "INCISO"],
+["CIUDADANIA", "SERAN"],
+["CONSEJO", "TRIBUNAL"],
+["PUBLICA", "ESTADOS"],
+["PODRA", "MECANISMOS"],
+["MINISTERIOS", "PODRAN"],
+["BIENES", "REGIONES"],
+["OTROS", "CONTROL"],
+["ATRIBUCIONES", "TENDRA"],
+["BIENES", "PROBIDAD"],
+["SERAN", "FUERZAS"],
+["LEYES", "PROCESO"],
+["INDIGENAS", "PUEBLOS"],
+["FORMA", "ORGANIZACION"],
+["RELACIONES", "SOLIDARIDAD"],
+["INTERNACIONALES", "SERAN"],
+["MENOS", "PRINCIPIO"],
+["DETERMINARA", "DEBE"],
+["PERSONA", "ADMINISTRACION"],
+["PRESIDENTA", "CORRESPONDERA"],
+["INTERES", "DERECHOS"],
+["INTEGRANTES", "SERVICIO"],
+["TRIBUTOS", "EJERCICIO"],
+["LIBERTAD", "ACCION"],
+["DERECHO", "LIMITACION"],
+["CALIDAD", "GARANTIZA"],
+["POTESTAD", "TRIBUTOS"],
+["REGIONALES", "EMPRESTITO"],
+["FORMA", "CATASTROFE"],
+["POTESTAD", "TODA"],
+["GARANTIZA", "FUNCIONES"],
+["REGIONES", "POTESTAD"],
+["CAUSALES", "PROCESO"],
+["CONTROL", "CONGRESO"],
+["EJECUCION", "GARANTIAS"],
+["MECANISMOS", "DERECHOS"],
+["ATRIBUCIONES", "COMPETENCIA"],
+["PARTE", "DERECHO"],
+["ARTICULO", "SUPREMACIA"],
+["DIRECCION", "PRINCIPIOS"],
+["CONFORMIDAD", "SOLIDARIDAD"],
+["INTERES", "TODA"],
+["MONOPOLIO", "ORGANIZACION"],
+["MINISTERIOS", "TENDRA"],
+["SOLO", "ESTATUTO"],
+["ASEGURA", "GARANTIAS"],
+["ESPECIAL", "VOTACIONES"],
+["SERVICIOS", "CONTRALORIA"],
+["PERJUICIO", "TENDRA"],
+["BIENES", "NUEVO"],
+["PAIS", "ATRIBUCIONES"],
+["CORTE", "ATRIBUCIONES"],
+["POLICIAS", "DEBERAN"],
+["COMPETENCIAS", "DEBERA"],
+["PRINCIPIOS", "SOLIDARIDAD"],
+["INTERCULTURALIDAD", "PLURINACIONALIDAD"],
+["DEFENSORIA", "DIRECCION"],
+["CONGRESO", "EJERCICIO"],
+["GARANTIZAR", "PUEBLOS"],
+["FISCALES", "ORGANIZACION"],
+["FUNDAMENTALES", "DERECHO"],
+["PRESIDENTE", "SERVICIO"],
+["GENERAL", "EJERCICIO"],
+["REGIONALES", "RECIBIDO"],
+["CARGOS", "FUERZAS"],
+["TERRITORIALES", "CONSTITUCION"],
+["ADMINISTRACION", "SOLO"],
+["LEY", "GOBIERNO"],
+["ANOS", "ASAMBLEA"],
+["CONSTITUCION", "PERSONAS"],
+["SERAN", "SERVICIOS"],
+["FINES", "EJECUCION"],
+["INDIGENAS", "ATRIBUCIONES"],
+["PROYECTO", "CORRESPONDERA"],
+["INTEGRANTES", "ASAMBLEA"],
+["FUNCIONAMIENTO", "CONSEJO"],
+["AUTORIDADES", "SOLO"],
+["PRINCIPIOS", "INTEGRACION"],
+["PROCESOS", "ORDENAMIENTO"],
+["DEBER", "COMPETENCIA"],
+["SERA", "RECIBIDO"],
+["FUNDAMENTALES", "DERECHOS"],
+["QUIENES", "INTEGRACION"],
+["SOLO", "DERECHO"],
+["FUNCION", "DIFERENCIACION"],
+["GENERAL", "ADMINISTRACION"],
+["COMISION", "CONGRESO"],
+["DERECHO", "CORRESPONDE"],
+["G", "SOLO"],
+["SERA", "LEY"],
+["REGIONAL", "CESARA"],
+["ATRIBUCIONES", "CORTE"],
+["POPULAR", "POLICIAS"],
+["CONTRALORIAS", "FUNCIONES"],
+["DEMOCRACIA", "LEY"],
+["EJERCICIO", "DEBERAN"],
+["FISCALES", "LEYES"],
+["TOMARA", "ACCESO"],
+["TERRITORIALES", "ORDENAMIENTO"],
+["DEBERAN", "PARTICIPACION"],
+["CONCEJO", "COMUNA"],
+["SERVICIO", "ORGANIZACIONES"],
+["CAMARA", "GOBIERNO"],
+["TRANSPARENCIA", "PRINCIPIOS"],
+["INTERNACIONALES", "DEBERES"],
+["PERSONA", "PRINCIPIOS"],
+["BANCO", "CONSEJO"],
+["CESARA", "ELECCIONES"],
+["CONFORME", "RELACIONES"],
+["ORGANIZACION", "CONCEJO"],
+["FUERZAS", "SOLO"],
+["CAMARA", "SERVICIO"],
+["FUNCIONAMIENTO", "LEY"],
+["CHILE", "BIS"],
+["TER", "BIS"],
+["SOLO", "FUNCIONES"],
+["ORGANIZACIONES", "DEBERAN"],
+["DEBERA", "ASEGURARA"],
+["ASI", "PUEBLOS"],
+["PERSONAS", "CONSTITUCION"],
+["ESCANOS", "DEBERAN"],
+["LAICO", "CONSTITUCION"],
+["PROCEDIMIENTO", "BIS"],
+["DERECHOS", "LIBERTAD"],
+["LEY", "CONVOCATORIA"],
+["RESPECTO", "ASAMBLEA"],
+["CONVOCATORIA", "DIPUTADAS"],
+["PRINCIPIOS", "CHILE"],
+["DEMOCRACIA", "MEDIOS"],
+["C", "COMPOSICION"],
+["DIPUTADAS", "SERVICIO"],
+["INAMOVILIDAD", "LEYES"],
+["LIMITACION", "DERECHOS"],
+["PLENO", "GARANTIAS"],
+["PARTICIPACION", "PRINCIPIO"],
+["MONOPOLIO", "PODRA"],
+["COMPOSICION", "SERAN"],
+["SOSTENIBILIDAD", "PRINCIPIOS"],
+["CLAUSULA", "PERSONA"],
+["INHABILIDADES", "CANDIDATOS"],
+["PERSONAS", "SUPREMACIA"],
+["PROYECTOS", "DERECHO"],
+["CUMPLIMIENTO", "CORRESPONDE"],
+["MAS", "CONCEJO"],
+["DEBE", "MEDIOS"],
+["COMPETENCIAS", "FUNCION"],
+["AREAS", "DEBERA"],
+["ENTIDADES", "ATRIBUCIONES"],
+
+
+  ];
+}
+
+</script>
+
